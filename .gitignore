@@ -1,0 +1,17 @@
+.cover
+.GOPATH
+bin/*
+*.pyc
+
+*~
+*.orig
+*.deb
+\#*#
+
+# Tooling
+/cscope.*
+
+# Intermediate build objects
+*.bc
+*.o
+*.s
