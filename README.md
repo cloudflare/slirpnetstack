@@ -63,14 +63,15 @@ Broken things:
    project inhertits them.
 
 
-Usage
------
+Usage with custom network namespace
+-----------------------------------
 
 Before you start, you need a guest network namespace handle. This is
 usually a /proc/<pid>/ns/net path. You can create such a namespace
 with this command - notice, it doesn't require root:
 
-    $ unshare -Urn
+    marek@:~$ unshare -Urn
+    root@:~#
 
 This will give you full permissions to do stuff inside a net
 namespace. Now you must configure it:
@@ -94,7 +95,7 @@ is to type "echo $$", like:
 
 Alternatively you can use "lsns" from host:
 
-    marek@:~$ sudo lsns -t net --raw|grep -- -bash
+    marek@:~$ lsns -t net | grep -- -bash
     4026533150 net 2 31530 marek -bash
 
 Now you can run slirpnetstack:
@@ -102,3 +103,28 @@ Now you can run slirpnetstack:
     sudo ./bin/slirpnetstack -interface tun0 -netns /proc/31530/ns/net
 
 
+Usage with gvisor
+-----------------
+
+Perhaps a more powerful way is to see slirpnetstack in action with
+gvisor. To avoid docker magic we can use OCI gvisor interface. See the
+script:
+
+   - https://github.com/majek/slirpnetstack/blob/master/test-gvisor.sh
+
+Once you run it, you will see:
+
+```
+marek@$ sudo bash test-gvisor.sh
+[*] Starting gvisor
+To enter the container run:
+    runsc --net-raw exec --console-socket /tmp/pty.sock hello bash
+[*] Running slirpnetstack
+[.] Joininig netns /proc/8519/ns/net
+[.] Opening tun interface tun0
+[.] Restoring root netns
+[+] #8578 Started
+```
+
+From now on you should have internet connectivity in the isolated
+gvisor container, supplied by slirpnetstack.
