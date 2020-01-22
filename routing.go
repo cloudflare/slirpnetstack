@@ -83,6 +83,7 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 			fmt.Printf("r.CreateEndpoint() = %v\n", errx)
 			return
 		}
+		r.Complete(false)
 		ep.SetSockOptInt(tcpip.DelayOption, 0)
 
 		xconn := gonet.NewConn(&wq, ep)
