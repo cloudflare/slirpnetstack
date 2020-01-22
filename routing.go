@@ -98,7 +98,7 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 func RoutingForward(guest KaConn, loc net.Addr) {
 	ga := guest.RemoteAddr()
 	fmt.Printf("[+] %s://%s/%s Routing conn new\n",
-		ga.Network(),
+		loc.Network(),
 		ga,
 		loc.String())
 
@@ -120,7 +120,7 @@ func RoutingForward(guest KaConn, loc net.Addr) {
 		pe = connSplice(guest, host)
 	}
 	fmt.Printf("[-] %s://%s/%s Routing conn done: %s\n",
-		ga.Network(),
+		loc.Network(),
 		ga,
 		loc.String(),
 		pe)
@@ -129,8 +129,8 @@ func RoutingForward(guest KaConn, loc net.Addr) {
 func RemoteForward(guest KaConn, rf *FwdAddr) {
 	ga := guest.RemoteAddr()
 	fmt.Printf("[+] %s://%s/%s %s-remote-fwd conn new\n",
-		ga.Network(),
-		ga,
+		rf.network,
+		guest.RemoteAddr(),
 		guest.LocalAddr(),
 		rf.HostAddr().String())
 	var pe ProxyError
@@ -151,7 +151,7 @@ func RemoteForward(guest KaConn, rf *FwdAddr) {
 		pe = connSplice(guest, host)
 	}
 	fmt.Printf("[-] %s://%s/%s %s-remote-fwd conn done: %s\n",
-		ga.Network(),
+		rf.network,
 		ga,
 		guest.LocalAddr(),
 		rf.HostAddr().String(),
