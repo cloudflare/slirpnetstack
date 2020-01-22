@@ -78,7 +78,7 @@ func NewStack() *stack.Stack {
 			udp.NewProtocol(),
 			icmp.NewProtocol4(),
 			icmp.NewProtocol6()},
-		HandleLocal: true,
+		HandleLocal: false,
 	}
 
 	s := stack.New(opts)

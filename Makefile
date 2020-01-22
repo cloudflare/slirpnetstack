@@ -60,3 +60,7 @@ GOTESTTARGETS = \
 test: $(GOTESTTARGETS)
 $(GOTESTTARGETS): $(wildcard tests/*/*.go)
 	go build -o $@ $(IMPORT_PATH)/tests/$(subst bin/,,$@)
+
+update-gomod:
+	go get -u gvisor.dev/gvisor@go all
+	go mod tidy
