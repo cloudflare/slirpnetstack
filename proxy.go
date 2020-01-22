@@ -96,8 +96,8 @@ func connSplice(local KaConn, remote KaConn) ProxyError {
 		doneCh = make(chan int, 2)
 	)
 
-	local.SetTimeouts(5*time.Second, 2)
-	remote.SetTimeouts(5*time.Second, 2)
+	local.SetTimeouts(125*time.Second, 4)
+	remote.SetTimeouts(125*time.Second, 4)
 
 	go proxyOneFlow(local, remote, &pe.LocalRead,
 		&pe.RemoteWrite, doneCh, 0)

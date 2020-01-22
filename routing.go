@@ -37,6 +37,10 @@ func UdpRoutingHandler(state *State) func(*udp.ForwarderRequest) {
 		}
 
 		xconn := gonet.NewConn(&wq, ep)
+
+		buf := make([]byte, 64*1024)
+		n, _ := xconn.Read(buf)
+
 		conn := &KaUDPConn{Conn: xconn}
 		if state.IsUDPRPCPort(loc.Port) || (rf != nil && rf.rpc) {
 			conn.closeOnWrite = true
@@ -44,9 +48,9 @@ func UdpRoutingHandler(state *State) func(*udp.ForwarderRequest) {
 
 		go func() {
 			if rf != nil {
-				RemoteForward(conn, rf)
+				RemoteForward(conn, rf, buf[:n])
 			} else {
-				RoutingForward(conn, loc)
+				RoutingForward(conn, loc, buf[:n])
 			}
 		}()
 	}
@@ -86,16 +90,16 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 
 		go func() {
 			if rf != nil {
-				RemoteForward(conn, rf)
+				RemoteForward(conn, rf, nil)
 			} else {
-				RoutingForward(conn, loc)
+				RoutingForward(conn, loc, nil)
 			}
 		}()
 	}
 	return h
 }
 
-func RoutingForward(guest KaConn, loc net.Addr) {
+func RoutingForward(guest KaConn, loc net.Addr, buf []byte) {
 	ga := guest.RemoteAddr()
 	fmt.Printf("[+] %s://%s/%s Routing conn new\n",
 		loc.Network(),
@@ -110,6 +114,9 @@ func RoutingForward(guest KaConn, loc net.Addr) {
 		pe.RemoteRead = err
 		pe.First = 2
 	} else {
+		if len(buf) > 0 {
+			xhost.Write(buf)
+		}
 		var host KaConn
 		switch v := xhost.(type) {
 		case *net.TCPConn:
@@ -126,7 +133,7 @@ func RoutingForward(guest KaConn, loc net.Addr) {
 		pe)
 }
 
-func RemoteForward(guest KaConn, rf *FwdAddr) {
+func RemoteForward(guest KaConn, rf *FwdAddr, buf []byte) {
 	ga := guest.RemoteAddr()
 	fmt.Printf("[+] %s://%s/%s %s-remote-fwd conn new\n",
 		rf.network,
@@ -141,6 +148,9 @@ func RemoteForward(guest KaConn, rf *FwdAddr) {
 		pe.RemoteRead = err
 		pe.First = 2
 	} else {
+		if len(buf) > 0 {
+			xhost.Write(buf)
+		}
 		var host KaConn
 		switch v := xhost.(type) {
 		case *net.TCPConn:

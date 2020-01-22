@@ -49,9 +49,6 @@ type State struct {
 }
 
 func (s *State) IsUDPRPCPort(port int) bool {
-	if port == 53 || port == 123 {
-		return true
-	}
 	return false
 }
 
