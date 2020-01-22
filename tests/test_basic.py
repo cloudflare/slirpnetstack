@@ -37,7 +37,6 @@ class BasicTest(base.TestCase):
         p = self.prun("-L %s -L %s" % (port, port))
         self.assertIn("[.] Join", p.stderr_line())
         self.assertIn("[.] Opening tun", p.stderr_line())
-        self.assertIn("[.] Restoring roo", p.stderr_line())
         xport = self.assertListenLine(p, "local-fwd Local listen tcp://127.0.0.1")
         self.assertEqual(port, xport)
         # [!] Failed to listen on tcp://127.0.0.1:45295
@@ -49,7 +48,6 @@ class BasicTest(base.TestCase):
         p = self.prun("-L udp://%s -L udp://%s" % (port, port))
         self.assertIn("[.] Join", p.stderr_line())
         self.assertIn("[.] Opening tun", p.stderr_line())
-        self.assertIn("[.] Restoring roo", p.stderr_line())
         xport = self.assertListenLine(p, "local-fwd Local listen udp://127.0.0.1")
         self.assertEqual(port, xport)
         # [!] Failed to listen on udp://127.0.0.1:45295

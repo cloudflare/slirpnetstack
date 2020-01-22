@@ -26,43 +26,54 @@ import (
 
 func GetTunTap(netNsPath string, ifName string) (int, bool, uint32, error) {
 	var (
-		restore func()
-		err     error
+		err error
 	)
+
+	type tunState struct {
+		fd      int
+		tapMode bool
+		mtu     uint32
+		err     error
+	}
+
+	ch := make(chan tunState, 2)
+	run := func() {
+		fmt.Fprintf(os.Stderr, "[.] Opening tun interface %s\n", ifName)
+		mtu, err := rawfile.GetMTU(ifName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[!] GetMTU(%s) = %s\n", ifName, err)
+			ch <- tunState{err: err}
+			return
+		}
+
+		tapMode := false
+
+		fd, err := tun.Open(ifName)
+		if err != nil {
+			tapMode = true
+			fd, err = tun.OpenTAP(ifName)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[!] open(%s) = %s\n", ifName, err)
+				ch <- tunState{err: err}
+				return
+			}
+		}
+		ch <- tunState{fd, tapMode, mtu, nil}
+	}
+
 	if netNsPath != "" {
 		fmt.Fprintf(os.Stderr, "[.] Joininig netns %s\n", netNsPath)
-		restore, err = joinNetNS(netNsPath)
+		err = joinNetNS(netNsPath, run)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[!] Can't join netns %s: %s\n", netNsPath, err)
 			return 0, false, 0, err
 		}
+	} else {
+		run()
 	}
 
-	fmt.Fprintf(os.Stderr, "[.] Opening tun interface %s\n", ifName)
-	mtu, err := rawfile.GetMTU(ifName)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[!] GetMTU(%s) = %s\n", ifName, err)
-		return 0, false, 0, err
-	}
-
-	tapMode := false
-
-	fd, err := tun.Open(ifName)
-	if err != nil {
-		tapMode = true
-		fd, err = tun.OpenTAP(ifName)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[!] open(%s) = %s\n", ifName, err)
-			return 0, false, 0, err
-		}
-	}
-
-	if netNsPath != "" {
-		fmt.Fprintf(os.Stderr, "[.] Restoring root netns\n")
-		restore()
-	}
-
-	return fd, tapMode, mtu, nil
+	s := <-ch
+	return s.fd, s.tapMode, s.mtu, s.err
 }
 
 func NewStack() *stack.Stack {
@@ -206,7 +217,7 @@ func GonetDialTCP(s *stack.Stack, laddr, raddr *tcpip.FullAddress, network tcpip
 }
 
 type GonetTCPConn struct {
-	net.Conn
+	*gonet.Conn
 	ep tcpip.Endpoint
 }
 

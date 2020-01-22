@@ -226,7 +226,6 @@ class TestCase(unittest.TestCase):
     def assertStartSync(self, p):
         self.assertIn("[.] Join", p.stderr_line())
         self.assertIn("[.] Opening tun", p.stderr_line())
-        self.assertIn("[.] Restoring roo", p.stderr_line())
         self.assertIn("Started", p.stderr_line())
 
     def assertListenLine(self, p, in_pattern):
