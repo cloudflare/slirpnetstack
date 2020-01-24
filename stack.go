@@ -12,7 +12,6 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
 	"gvisor.dev/gvisor/pkg/tcpip/link/rawfile"
-	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/link/tun"
 	"gvisor.dev/gvisor/pkg/tcpip/network/arp"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
@@ -76,7 +75,7 @@ func GetTunTap(netNsPath string, ifName string) (int, bool, uint32, error) {
 	return s.fd, s.tapMode, s.mtu, s.err
 }
 
-func NewStack() *stack.Stack {
+func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	// Create the stack with ipv4 and tcp protocols, then add a tun-based
 	// NIC and ipv4 address.
 	opts := stack.Options{
@@ -97,19 +96,21 @@ func NewStack() *stack.Stack {
 	s.SetTransportProtocolOption(tcp.ProtocolNumber, tcp.SACKEnabled(true))
 	s.SetNetworkProtocolOption(ipv4.ProtocolNumber, tcpip.DefaultTTLOption(64))
 	s.SetNetworkProtocolOption(ipv6.ProtocolNumber, tcpip.DefaultTTLOption(64))
-	s.SetTransportProtocolOption(tcp.ProtocolNumber, tcpip.ModerateReceiveBufferOption(true))
 
 	// We expect no packet loss, therefore we can bump
-	// buffers. Too large buffers thrash cache, so there is a
-	// wrong value, benchmark required.
-	s.SetTransportProtocolOption(tcp.ProtocolNumber, tcp.ReceiveBufferSizeOption{1, 4 * tcp.DefaultReceiveBufferSize, 8 * tcp.DefaultReceiveBufferSize})
-	s.SetTransportProtocolOption(tcp.ProtocolNumber, tcp.SendBufferSizeOption{1, 4 * tcp.DefaultSendBufferSize, 8 * tcp.DefaultSendBufferSize})
+	// buffers. Too large buffers thrash cache, so there is litle
+	// point in too large buffers.
+	s.SetTransportProtocolOption(tcp.ProtocolNumber,
+		tcp.ReceiveBufferSizeOption{1, rcvBufferSize, rcvBufferSize})
+	s.SetTransportProtocolOption(tcp.ProtocolNumber,
+		tcp.SendBufferSizeOption{1, sndBufferSize, sndBufferSize})
 	return s
 }
 
 func AddTunTap(s *stack.Stack, nic tcpip.NICID, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32) error {
 	parms := fdbased.Options{FDs: []int{tunFd},
 		MTU: tapMtu,
+		RXChecksumOffload:  true,
 	}
 	if tapMode {
 		parms.EthernetHeader = true
@@ -121,7 +122,8 @@ func AddTunTap(s *stack.Stack, nic tcpip.NICID, tunFd int, tapMode bool, macAddr
 		fmt.Fprintf(os.Stderr, "[!] fdbased.New(%s) = %s\n", ifName, err)
 		return err
 	}
-	if err := s.CreateNIC(nic, sniffer.New(linkEP)); err != nil {
+
+	if err := s.CreateNIC(nic, linkEP); err != nil {
 		fmt.Fprintf(os.Stderr, "[!] CreateNIC(%s) = %s\n", ifName, err)
 		return fmt.Errorf("%s", err)
 	}

@@ -124,7 +124,12 @@ func Main() int {
 		return -1
 	}
 
-	s := NewStack()
+	// With high mtu, low packet loss and low latency over tuntap,
+	// the specific value isn't that important. The only important
+	// bit is that it should be at least a couple times MSS.
+	bufSize := 4*1024*1024
+
+	s := NewStack(bufSize, bufSize)
 
 	err = AddTunTap(s, 1, tunFd, tapMode, MustParseMAC("70:71:aa:4b:29:aa"), tapMtu)
 	if err != nil {
@@ -171,7 +176,9 @@ func Main() int {
 	}
 
 	tcpHandler := TcpRoutingHandler(&state)
-	fwdTcp := tcp.NewForwarder(s, 30000, 10, tcpHandler)
+	// Set sliding window to high value. For example
+	// bufSize. Allow 10 concurrent new connection attempts.
+	fwdTcp := tcp.NewForwarder(s, bufSize, 10, tcpHandler)
 	s.SetTransportProtocolHandler(tcp.ProtocolNumber, fwdTcp.HandlePacket)
 
 	udpHandler := UdpRoutingHandler(&state)
