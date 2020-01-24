@@ -176,9 +176,9 @@ func Main() int {
 	}
 
 	tcpHandler := TcpRoutingHandler(&state)
-	// Set sliding window to high value. For example
-	// bufSize. Allow 10 concurrent new connection attempts.
-	fwdTcp := tcp.NewForwarder(s, bufSize, 10, tcpHandler)
+	// Set sliding window auto-tuned value. Allow 10 concurrent
+	// new connection attempts.
+	fwdTcp := tcp.NewForwarder(s, 0, 10, tcpHandler)
 	s.SetTransportProtocolHandler(tcp.ProtocolNumber, fwdTcp.HandlePacket)
 
 	udpHandler := UdpRoutingHandler(&state)
