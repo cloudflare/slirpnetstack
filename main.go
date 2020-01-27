@@ -111,7 +111,7 @@ func Main() int {
 	// With high mtu, low packet loss and low latency over tuntap,
 	// the specific value isn't that important. The only important
 	// bit is that it should be at least a couple times MSS.
-	bufSize := 4*1024*1024
+	bufSize := 4 * 1024 * 1024
 
 	s := NewStack(bufSize, bufSize)
 

@@ -109,8 +109,8 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 
 func AddTunTap(s *stack.Stack, nic tcpip.NICID, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32) error {
 	parms := fdbased.Options{FDs: []int{tunFd},
-		MTU: tapMtu,
-		RXChecksumOffload:  true,
+		MTU:               tapMtu,
+		RXChecksumOffload: true,
 	}
 	if tapMode {
 		parms.EthernetHeader = true
@@ -246,7 +246,6 @@ func networkProtocolNumberFromIP(ip net.IP) tcpip.NetworkProtocolNumber {
 }
 
 func GonetDialUDP(s *stack.Stack, laddr, raddr *tcpip.FullAddress, network tcpip.NetworkProtocolNumber) (*KaUDPConn, error) {
-
 	c, err := gonet.DialUDP(
 		s,
 		laddr,
