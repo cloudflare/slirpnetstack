@@ -107,12 +107,13 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf *FwdAddr, doneChannel <-ch
 
 func LocalForward(state *State, s *stack.Stack, host KaConn, gaddr net.Addr, buf []byte) {
 	raddr := host.RemoteAddr()
-	fmt.Printf("[+] %s://%s/%s/%s local-fwd conn\n",
-		gaddr.Network(),
-		raddr,
-		host.LocalAddr(),
-		gaddr.String())
-
+	if logConnections {
+		fmt.Printf("[+] %s://%s/%s/%s local-fwd conn\n",
+			gaddr.Network(),
+			raddr,
+			host.LocalAddr(),
+			gaddr.String())
+	}
 	var srcIP net.Addr
 	// When doing local forward, if the source IP of local
 	// connection had routable IP (unlike
@@ -139,9 +140,11 @@ func LocalForward(state *State, s *stack.Stack, host KaConn, gaddr net.Addr, buf
 	} else {
 		pe = connSplice(local, host)
 	}
-	fmt.Printf("[-] %s://%s/%s/%s local-fwd done: %s\n",
-		gaddr.Network(),
-		raddr,
-		host.LocalAddr(),
-		gaddr.String(), pe)
+	if logConnections {
+		fmt.Printf("[-] %s://%s/%s/%s local-fwd done: %s\n",
+			gaddr.Network(),
+			raddr,
+			host.LocalAddr(),
+			gaddr.String(), pe)
+	}
 }

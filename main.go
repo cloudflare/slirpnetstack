@@ -16,12 +16,12 @@ import (
 )
 
 var (
-	debug     bool
-	debugLog  string
-	netNsPath string
-	ifName    string
-	remoteFwd FwdAddrSlice
-	localFwd  FwdAddrSlice
+	netNsPath      string
+	ifName         string
+	remoteFwd      FwdAddrSlice
+	localFwd       FwdAddrSlice
+	logConnections bool
+	quiet          bool
 )
 
 func init() {
@@ -29,6 +29,7 @@ func init() {
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
 	flag.Var(&remoteFwd, "R", "Connections to remote side forwarded local")
 	flag.Var(&localFwd, "L", "Connections to local side forwarded remote")
+	flag.BoolVar(&quiet, "quiet", false, "Print less stuff on screen")
 }
 
 func main() {
@@ -60,6 +61,8 @@ func Main() int {
 	if flag.Parsed() == false {
 		flag.Parse()
 	}
+
+	logConnections = !quiet
 
 	localFwd.SetDefaultAddrs(
 		netParseIP("127.0.0.1"),

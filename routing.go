@@ -102,10 +102,12 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 
 func RoutingForward(guest KaConn, loc net.Addr, buf []byte) {
 	ga := guest.RemoteAddr()
-	fmt.Printf("[+] %s://%s/%s Routing conn new\n",
-		loc.Network(),
-		ga,
-		loc.String())
+	if logConnections {
+		fmt.Printf("[+] %s://%s/%s Routing conn new\n",
+			loc.Network(),
+			ga,
+			loc.String())
+	}
 
 	var pe ProxyError
 	xhost, err := net.Dial(loc.Network(), loc.String())
@@ -127,20 +129,24 @@ func RoutingForward(guest KaConn, loc net.Addr, buf []byte) {
 		}
 		pe = connSplice(guest, host)
 	}
-	fmt.Printf("[-] %s://%s/%s Routing conn done: %s\n",
-		loc.Network(),
-		ga,
-		loc.String(),
-		pe)
+	if logConnections {
+		fmt.Printf("[-] %s://%s/%s Routing conn done: %s\n",
+			loc.Network(),
+			ga,
+			loc.String(),
+			pe)
+	}
 }
 
 func RemoteForward(guest KaConn, rf *FwdAddr, buf []byte) {
 	ga := guest.RemoteAddr()
-	fmt.Printf("[+] %s://%s/%s %s-remote-fwd conn new\n",
-		rf.network,
-		guest.RemoteAddr(),
-		guest.LocalAddr(),
-		rf.HostAddr().String())
+	if logConnections {
+		fmt.Printf("[+] %s://%s/%s %s-remote-fwd conn new\n",
+			rf.network,
+			guest.RemoteAddr(),
+			guest.LocalAddr(),
+			rf.HostAddr().String())
+	}
 	var pe ProxyError
 	xhost, err := net.Dial(rf.network, rf.HostAddr().String())
 	if err != nil {
@@ -161,10 +167,12 @@ func RemoteForward(guest KaConn, rf *FwdAddr, buf []byte) {
 		}
 		pe = connSplice(guest, host)
 	}
-	fmt.Printf("[-] %s://%s/%s %s-remote-fwd conn done: %s\n",
-		rf.network,
-		ga,
-		guest.LocalAddr(),
-		rf.HostAddr().String(),
-		pe)
+	if logConnections {
+		fmt.Printf("[-] %s://%s/%s %s-remote-fwd conn done: %s\n",
+			rf.network,
+			ga,
+			guest.LocalAddr(),
+			rf.HostAddr().String(),
+			pe)
+	}
 }
