@@ -13,7 +13,6 @@ import (
 	"gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
-	"gvisor.dev/gvisor/runsc/specutils"
 )
 
 var (
@@ -26,9 +25,6 @@ var (
 )
 
 func init() {
-	flag.BoolVar(&debug, "debug", false, "enable debug logging.")
-	flag.StringVar(&debugLog, "debug-log", "", "additional location for logs. If it ends with '/', log files are created inside the directory with default names. The following variables are available: %TIMESTAMP%, %COMMAND%.")
-
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
 	flag.Var(&remoteFwd, "R", "Connections to remote side forwarded local")
@@ -100,22 +96,7 @@ func Main() int {
 		MustParseCIDR("::/0"),
 	)
 
-	if debug {
-		log.SetLevel(log.Info)
-	} else {
-		log.SetLevel(log.Warning)
-	}
-
-	if debugLog != "" {
-		f, err := specutils.DebugLogFile(debugLog, "slirp", "" /* name */)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error opening debug log file in %q: %v", debugLog, err)
-			return -1
-		}
-		var e log.Emitter
-		e = &log.GoogleEmitter{&log.Writer{Next: f}}
-		log.SetTarget(e)
-	}
+	log.SetLevel(log.Warning)
 
 	rand.Seed(time.Now().UnixNano())
 
