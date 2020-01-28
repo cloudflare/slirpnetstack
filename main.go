@@ -45,10 +45,6 @@ type State struct {
 	remoteTcpFwd map[string]*FwdAddr
 }
 
-func (s *State) IsUDPRPCPort(port int) bool {
-	return false
-}
-
 func Main() int {
 	var state State
 

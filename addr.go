@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 )
@@ -24,13 +25,13 @@ import (
   -R remote_socket:host:hostport
   -R remote_socket:local_socket
 
-
 */
 type FwdAddr struct {
-	network string
-	bind    tcpip.FullAddress
-	host    tcpip.FullAddress
-	rpc     bool
+	network    string
+	bind       tcpip.FullAddress
+	host       tcpip.FullAddress
+	kaEnable   bool
+	kaInterval time.Duration
 }
 
 type FwdAddrSlice []FwdAddr
@@ -68,7 +69,8 @@ func (f *FwdAddrSlice) Set(value string) error {
 	var fwa FwdAddr
 	if network == "udprpc" {
 		fwa.network = "udp"
-		fwa.rpc = true
+		fwa.kaEnable = true
+		fwa.kaInterval = 0
 	} else {
 		fwa.network = network
 	}

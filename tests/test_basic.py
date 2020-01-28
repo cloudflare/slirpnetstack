@@ -1,5 +1,7 @@
 from . import base
+from . import utils
 import os
+import unittest
 
 
 class BasicTest(base.TestCase):
@@ -102,6 +104,24 @@ class RoutingTest(base.TestCase):
             self.assertTcpEcho(ip="3ffe::100", port=echo_port)
 
     @base.isolateHostNetwork()
+    def test_tcp_routing_multi(self):
+        ''' Test tcp routing. Can we establish like 200 connnections? '''
+        echo_port = self.start_tcp_echo()
+        p = self.prun("")
+        self.assertStartSync(p)
+        c = 0
+        with self.guest_netns():
+            for i in range(200):
+                self.assertTcpEcho(ip="192.168.1.100", port=echo_port)
+            for i in range(400):
+                l = p.stdout_line()
+                if "Routing conn new" in l:
+                    c += 1
+                elif "Routing conn done" in l:
+                    c -= 1
+        self.assertEqual(c, 0)
+
+    @base.isolateHostNetwork()
     def test_udp_routing(self):
         ''' Test udp routing. Send packet from guest onto an IP assigned
         to local-scoped IP on host. '''
@@ -115,6 +135,26 @@ class RoutingTest(base.TestCase):
             self.assertIn("Routing conn new", p.stdout_line())
             # Can't test conn done message.
             self.assertUdpEcho(port=echo_port, ip="192.168.1.100")
+
+    @unittest.skip("broken")
+    @base.isolateHostNetwork()
+    def test_udp_routing_merge(self):
+        '''Test udp routing. There is a bug where two packets get merged into
+        one if rapidly sent. This is breaking DNS. '''
+        echo_port = self.start_udp_echo()
+        self.assertUdpEcho(port=echo_port, ip="192.168.1.100")
+
+        p = self.prun("")
+        self.assertStartSync(p)
+        with self.guest_netns():
+            s = utils.connect(port=echo_port, ip="192.168.1.100", udp=True)
+            s.sendall(b"ala")
+            s.sendall(b"ma")
+            s.sendall(b"kota")
+            self.assertEqual(b"ala", s.recv(1024))
+            self.assertEqual(b"ma", s.recv(1024))
+            self.assertEqual(b"kota", s.recv(1024))
+            s.close()
 
 
 class GenericForwardingTest(base.TestCase):

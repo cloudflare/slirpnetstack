@@ -87,7 +87,7 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf *FwdAddr, doneChannel <-ch
 
 			// Warning, this is racy, what if two packets are in the queue?
 			remote, err := MagicDialUDP(laddr, raddr)
-			if state.IsUDPRPCPort(host.Port) || rf.rpc {
+			if rf.kaEnable && rf.kaInterval == 0 {
 				remote.closeOnWrite = true
 			}
 

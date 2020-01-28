@@ -42,7 +42,7 @@ func UdpRoutingHandler(state *State) func(*udp.ForwarderRequest) {
 		n, _ := xconn.Read(buf)
 
 		conn := &KaUDPConn{Conn: xconn}
-		if state.IsUDPRPCPort(loc.Port) || (rf != nil && rf.rpc) {
+		if rf != nil && rf.kaEnable && rf.kaInterval == 0 {
 			conn.closeOnWrite = true
 		}
 
