@@ -136,7 +136,6 @@ class RoutingTest(base.TestCase):
             # Can't test conn done message.
             self.assertUdpEcho(port=echo_port, ip="192.168.1.100")
 
-    @unittest.skip("broken")
     @base.isolateHostNetwork()
     def test_udp_routing_merge(self):
         '''Test udp routing. There is a bug where two packets get merged into

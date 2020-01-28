@@ -161,7 +161,7 @@ func Main() int {
 	fwdTcp := tcp.NewForwarder(s, 0, 10, tcpHandler)
 	s.SetTransportProtocolHandler(tcp.ProtocolNumber, fwdTcp.HandlePacket)
 
-	udpHandler := UdpRoutingHandler(&state)
+	udpHandler := UdpRoutingHandler(s, &state)
 	fwdUdp := udp.NewForwarder(s, udpHandler)
 	s.SetTransportProtocolHandler(udp.ProtocolNumber, fwdUdp.HandlePacket)
 

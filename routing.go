@@ -6,12 +6,13 @@ import (
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 	"gvisor.dev/gvisor/pkg/waiter"
 )
 
-func UdpRoutingHandler(state *State) func(*udp.ForwarderRequest) {
+func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest) {
 	h := func(r *udp.ForwarderRequest) {
 		id := r.ID()
 		loc := &net.UDPAddr{
@@ -36,21 +37,18 @@ func UdpRoutingHandler(state *State) func(*udp.ForwarderRequest) {
 			return
 		}
 
-		xconn := gonet.NewConn(&wq, ep)
-
-		buf := make([]byte, 64*1024)
-		n, _ := xconn.Read(buf)
-
+		xconn := gonet.NewPacketConn(s, &wq, ep)
 		conn := &KaUDPConn{Conn: xconn}
+
 		if rf != nil && rf.kaEnable && rf.kaInterval == 0 {
 			conn.closeOnWrite = true
 		}
 
 		go func() {
 			if rf != nil {
-				RemoteForward(conn, rf, buf[:n])
+				RemoteForward(conn, rf)
 			} else {
-				RoutingForward(conn, loc, buf[:n])
+				RoutingForward(conn, loc)
 			}
 		}()
 	}
@@ -91,16 +89,16 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 
 		go func() {
 			if rf != nil {
-				RemoteForward(conn, rf, nil)
+				RemoteForward(conn, rf)
 			} else {
-				RoutingForward(conn, loc, nil)
+				RoutingForward(conn, loc)
 			}
 		}()
 	}
 	return h
 }
 
-func RoutingForward(guest KaConn, loc net.Addr, buf []byte) {
+func RoutingForward(guest KaConn, loc net.Addr) {
 	ga := guest.RemoteAddr()
 	if logConnections {
 		fmt.Printf("[+] %s://%s/%s Routing conn new\n",
@@ -117,9 +115,6 @@ func RoutingForward(guest KaConn, loc net.Addr, buf []byte) {
 		pe.RemoteRead = err
 		pe.First = 2
 	} else {
-		if len(buf) > 0 {
-			xhost.Write(buf)
-		}
 		var host KaConn
 		switch v := xhost.(type) {
 		case *net.TCPConn:
@@ -138,7 +133,7 @@ func RoutingForward(guest KaConn, loc net.Addr, buf []byte) {
 	}
 }
 
-func RemoteForward(guest KaConn, rf *FwdAddr, buf []byte) {
+func RemoteForward(guest KaConn, rf *FwdAddr) {
 	ga := guest.RemoteAddr()
 	if logConnections {
 		fmt.Printf("[+] %s://%s/%s %s-remote-fwd conn new\n",
@@ -155,9 +150,6 @@ func RemoteForward(guest KaConn, rf *FwdAddr, buf []byte) {
 		pe.RemoteRead = err
 		pe.First = 2
 	} else {
-		if len(buf) > 0 {
-			xhost.Write(buf)
-		}
 		var host KaConn
 		switch v := xhost.(type) {
 		case *net.TCPConn:
