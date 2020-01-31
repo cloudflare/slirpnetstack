@@ -237,6 +237,23 @@ class RemoteForwardingTest(base.TestCase):
             self.assertUdpEcho(ip='192.0.2.5', port=80)
             self.assertUdpEcho(ip='192.0.2.5', port=80)
 
+    def test_udp_remote_fwd_merge(self):
+        '''Test if udp message boundry is preserved. '''
+        echo_port = self.start_udp_echo()
+        p = self.prun("-R udp://192.0.2.5:80:127.0.0.1:%s" % echo_port)
+        self.assertStartSync(p)
+
+        self.assertUdpEcho(ip='127.0.0.1', port=echo_port)
+        with self.guest_netns():
+            s = utils.connect(ip='192.0.2.5', port=80, udp=True)
+            s.sendall(b"ala")
+            s.sendall(b"ma")
+            s.sendall(b"kota")
+            self.assertEqual(b"ala", s.recv(1024))
+            self.assertEqual(b"ma", s.recv(1024))
+            self.assertEqual(b"kota", s.recv(1024))
+            s.close()
+
 
 class LocalForwardingTest(base.TestCase):
     def test_tcp_local_fwd(self):
@@ -322,3 +339,23 @@ class LocalForwardingTest(base.TestCase):
         self.assertUdpEcho(ip="127.0.0.1", port=port)
         self.assertIn("local-fwd conn", p.stdout_line())
         self.assertIn("local-fwd done", p.stdout_line())
+
+    def test_udp_local_fwd_merge(self):
+        '''Test if udp message boundry is preserved. '''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://0:10.0.2.100:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
+        s = utils.connect(port=port, ip="127.0.0.1", udp=True)
+        s.sendall(b"ala")
+        # TODO: we need to do a sync here due to MagicDialUDP race condition
+        self.assertIn("local-fwd conn", p.stdout_line())
+        s.sendall(b"ma")
+        s.sendall(b"kota")
+        self.assertEqual(b"ala", s.recv(1024))
+        self.assertEqual(b"ma", s.recv(1024))
+        self.assertEqual(b"kota", s.recv(1024))
+        s.close()
