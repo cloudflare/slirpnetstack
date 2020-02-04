@@ -218,7 +218,7 @@ func (a *AddrFlags) String() string {
 	if a.Addr == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s://%s", a.Network(), a)
+	return fmt.Sprintf("%s://%s", a.Network(), a.Addr)
 }
 
 func (a *AddrFlags) Set(value string) error {

@@ -199,6 +199,8 @@ func Main() int {
 stop:
 	// TODO: define semantics of graceful close on signal
 	//s.Wait()
-	metrics.Close()
+	if metrics != nil {
+		metrics.Close()
+	}
 	return 0
 }
