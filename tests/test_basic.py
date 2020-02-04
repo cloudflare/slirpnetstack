@@ -353,9 +353,9 @@ class LocalForwardingTest(base.TestCase):
         s.sendall(b"ala")
         # TODO: we need to do a sync here due to MagicDialUDP race condition
         self.assertIn("local-fwd conn", p.stdout_line())
+        self.assertEqual(b"ala", s.recv(1024))
         s.sendall(b"ma")
         s.sendall(b"kota")
-        self.assertEqual(b"ala", s.recv(1024))
         self.assertEqual(b"ma", s.recv(1024))
         self.assertEqual(b"kota", s.recv(1024))
         s.close()
