@@ -27,11 +27,12 @@ import (
 
 */
 type FwdAddr struct {
-	network    string
-	bind       tcpip.FullAddress
-	host       tcpip.FullAddress
-	kaEnable   bool
-	kaInterval time.Duration
+	network       string
+	bind          tcpip.FullAddress
+	host          tcpip.FullAddress
+	kaEnable      bool
+	kaInterval    time.Duration
+	proxyProtocol bool
 }
 
 type FwdAddrSlice []FwdAddr
@@ -205,4 +206,59 @@ func netAddrIP(a net.Addr) net.IP {
 		return v.IP
 	}
 	return nil
+}
+
+// Addr that can be set from flag.Var. For example:
+//	flag.Var(&metricAddr, "m", "Metrics address")
+type AddrFlags struct {
+	net.Addr
+}
+
+func (a *AddrFlags) String() string {
+	if a.Addr == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s://%s", a.Network(), a)
+}
+
+func (a *AddrFlags) Set(value string) error {
+	if addr, err := AddrFromString(value); err != nil {
+		return err
+	} else {
+		a.Addr = addr
+		return nil
+	}
+}
+
+func AddrFromString(value string) (net.Addr, error) {
+	p := strings.SplitN(value, "://", 2)
+	if len(p) != 2 {
+		return nil, fmt.Errorf("Address must be in form net://address, where net is one of unix/tcp/udp")
+	}
+	var addr net.Addr
+	switch p[0] {
+	case "tcp":
+		if v, err := net.ResolveTCPAddr(p[0], p[1]); err != nil {
+			return nil, err
+		} else {
+			addr = v
+		}
+
+	case "udp":
+		if v, err := net.ResolveUDPAddr(p[0], p[1]); err != nil {
+			return nil, err
+		} else {
+			addr = v
+		}
+
+	case "unix":
+		if v, err := net.ResolveUnixAddr(p[0], p[1]); err != nil {
+			return nil, err
+		} else {
+			addr = v
+		}
+	default:
+		return nil, fmt.Errorf("Address must be in form net://address, where net is one of unix/tcp/udp")
+	}
+	return addr, nil
 }

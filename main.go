@@ -22,6 +22,7 @@ var (
 	localFwd       FwdAddrSlice
 	logConnections bool
 	quiet          bool
+	metricAddr     AddrFlags
 )
 
 func init() {
@@ -30,6 +31,7 @@ func init() {
 	flag.Var(&remoteFwd, "R", "Connections to remote side forwarded local")
 	flag.Var(&localFwd, "L", "Connections to local side forwarded remote")
 	flag.BoolVar(&quiet, "quiet", false, "Print less stuff on screen")
+	flag.Var(&metricAddr, "m", "Metrics addr")
 }
 
 func main() {
@@ -96,8 +98,17 @@ func Main() int {
 	)
 
 	log.SetLevel(log.Warning)
-
 	rand.Seed(time.Now().UnixNano())
+
+	var metrics *Metrics
+	if metricAddr.Addr != nil && metricAddr.Network() != "" {
+		var err error
+		metrics, err = StartMetrics(metricAddr.Addr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[!] Failed to start metrics: %s\n", err)
+			return -2
+		}
+	}
 
 	tunFd, tapMode, tapMtu, err := GetTunTap(netNsPath, ifName)
 	if err != nil {
@@ -181,5 +192,6 @@ func Main() int {
 stop:
 	// TODO: define semantics of graceful close on signal
 	//s.Wait()
+	metrics.Close()
 	return 0
 }
