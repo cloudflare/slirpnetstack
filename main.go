@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -23,6 +24,7 @@ var (
 	logConnections bool
 	quiet          bool
 	metricAddr     AddrFlags
+	gomaxprocs     int
 )
 
 func init() {
@@ -32,6 +34,7 @@ func init() {
 	flag.Var(&localFwd, "L", "Connections to local side forwarded remote")
 	flag.BoolVar(&quiet, "quiet", false, "Print less stuff on screen")
 	flag.Var(&metricAddr, "m", "Metrics addr")
+	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 }
 
 func main() {
@@ -58,6 +61,10 @@ func Main() int {
 	// duplicated items in list, ensure parsing is done only once.
 	if flag.Parsed() == false {
 		flag.Parse()
+	}
+
+	if gomaxprocs > 0 {
+		runtime.GOMAXPROCS(gomaxprocs)
 	}
 
 	logConnections = !quiet
