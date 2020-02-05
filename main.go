@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"gvisor.dev/gvisor/pkg/log"
+	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 )
@@ -25,6 +27,7 @@ var (
 	quiet          bool
 	metricAddr     AddrFlags
 	gomaxprocs     int
+	pcapPath       string
 )
 
 func init() {
@@ -35,6 +38,7 @@ func init() {
 	flag.BoolVar(&quiet, "quiet", false, "Print less stuff on screen")
 	flag.Var(&metricAddr, "m", "Metrics addr")
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
+	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
 }
 
 func main() {
@@ -51,7 +55,13 @@ type State struct {
 }
 
 func Main() int {
-	var state State
+	var (
+		state   State
+		linkEP  stack.LinkEndpoint
+		mac     net.HardwareAddr = MustParseMAC("70:71:aa:4b:29:aa")
+		metrics *Metrics
+		err     error
+	)
 
 	sigCh := make(chan os.Signal, 4)
 	signal.Notify(sigCh, syscall.SIGINT)
@@ -107,9 +117,7 @@ func Main() int {
 	log.SetLevel(log.Warning)
 	rand.Seed(time.Now().UnixNano())
 
-	var metrics *Metrics
 	if metricAddr.Addr != nil && metricAddr.Network() != "" {
-		var err error
 		metrics, err = StartMetrics(metricAddr.Addr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[!] Failed to start metrics: %s\n", err)
@@ -129,9 +137,24 @@ func Main() int {
 
 	s := NewStack(bufSize, bufSize)
 
-	err = AddTunTap(s, 1, tunFd, tapMode, MustParseMAC("70:71:aa:4b:29:aa"), tapMtu)
-	if err != nil {
-		return -1
+	if linkEP, err = createLinkEP(s, tunFd, tapMode, mac, tapMtu); err != nil {
+		panic(fmt.Sprintf("Failed to create linkEP: %s", err))
+	}
+
+	if pcapPath != "" {
+		pcapFile, err := os.OpenFile(pcapPath, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to open PCAP file: %s", err))
+		}
+		if linkEP, err = sniffer.NewWithFile(linkEP, pcapFile, tapMtu); err != nil {
+			panic(fmt.Sprintf("Failed to sniff linkEP: %s", err))
+		}
+		defer pcapFile.Close()
+	}
+
+	if err = createNIC(s, 1, linkEP); err != nil {
+		panic(fmt.Sprintf("Failed to createNIC: %s", err))
+
 	}
 
 	StackRoutingSetup(s, 1, "10.0.2.2/24")
@@ -142,10 +165,7 @@ func Main() int {
 	doneChannel := make(chan bool)
 
 	for _, lf := range localFwd {
-		var (
-			err error
-			srv Listener
-		)
+		var srv Listener
 		switch lf.network {
 		case "tcp":
 			srv, err = LocalForwardTCP(&state, s, &lf, doneChannel)
