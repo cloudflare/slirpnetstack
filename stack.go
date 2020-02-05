@@ -107,7 +107,7 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	return s
 }
 
-func AddTunTap(s *stack.Stack, nic tcpip.NICID, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32) error {
+func createLinkEP(s *stack.Stack, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32) (stack.LinkEndpoint, error) {
 	parms := fdbased.Options{FDs: []int{tunFd},
 		MTU:               tapMtu,
 		RXChecksumOffload: true,
@@ -117,12 +117,10 @@ func AddTunTap(s *stack.Stack, nic tcpip.NICID, tunFd int, tapMode bool, macAddr
 		parms.Address = tcpip.LinkAddress(macAddress)
 	}
 
-	linkEP, err := fdbased.New(&parms)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[!] fdbased.New(%s) = %s\n", ifName, err)
-		return err
-	}
+	return fdbased.New(&parms)
+}
 
+func createNIC(s *stack.Stack, nic tcpip.NICID, linkEP stack.LinkEndpoint) error {
 	if err := s.CreateNIC(nic, linkEP); err != nil {
 		fmt.Fprintf(os.Stderr, "[!] CreateNIC(%s) = %s\n", ifName, err)
 		return fmt.Errorf("%s", err)
