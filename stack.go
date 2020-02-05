@@ -23,7 +23,7 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 )
 
-func GetTunTap(netNsPath string, ifName string) (int, bool, uint32, error) {
+func GetTunTap(netNsPath string, ifName string) (int, bool, uint, error) {
 	var (
 		err error
 	)
@@ -72,7 +72,7 @@ func GetTunTap(netNsPath string, ifName string) (int, bool, uint32, error) {
 	}
 
 	s := <-ch
-	return s.fd, s.tapMode, s.mtu, s.err
+	return s.fd, s.tapMode, uint(s.mtu), s.err
 }
 
 func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {

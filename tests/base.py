@@ -231,9 +231,10 @@ class TestCase(unittest.TestCase):
             s.recv(1024)
         self.assertEqual(e.exception.errno, errno.ECONNREFUSED)
 
-    def assertStartSync(self, p):
-        self.assertIn("[.] Join", p.stderr_line())
-        self.assertIn("[.] Opening tun", p.stderr_line())
+    def assertStartSync(self, p, fd=False):
+        if not fd:
+            self.assertIn("[.] Join", p.stderr_line())
+            self.assertIn("[.] Opening tun", p.stderr_line())
         self.assertIn("Started", p.stderr_line())
 
     def assertListenLine(self, p, in_pattern):
