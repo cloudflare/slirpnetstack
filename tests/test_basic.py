@@ -26,6 +26,22 @@ class BasicTest(base.TestCase):
             r = os.system("ping -q 1.1.1.1 -c 1 -n > /dev/null")
             self.assertEqual(r, 0)
 
+    def test_pcap(self):
+        ''' Check -pcap capture '''
+        pcap = self.get_tmp_filename("test.pcap")
+        p = self.prun("-pcap %s" % pcap)
+        self.assertStartSync(p)
+        with self.guest_netns():
+            r = os.system("ping -q 1.1.1.1 -c 1 -n > /dev/null")
+            self.assertEqual(r, 0)
+        with open(pcap, 'rb') as f:
+            data = f.read(24)
+            header = struct.unpack(">LHHLLLL", data)
+            self.assertEqual(header[0], 0xa1b2c3d4)
+            data = f.read(16)
+            (seconds, useconds, captured_length, packet_length) = struct.unpack(">LLLL", data)
+            self.assertEqual(captured_length, 28)
+
     def test_basic_connection(self):
         ''' Test connection reset on netstack IP. Netstack is not supposed to
         forward nor route this. '''
