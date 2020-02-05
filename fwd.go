@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
@@ -40,7 +41,7 @@ func LocalForwardTCP(state *State, s *stack.Stack, rf *FwdAddr, doneChannel <-ch
 			remote := &KaTCPConn{nRemote.(*net.TCPConn)}
 
 			go func() {
-				LocalForward(state, s, remote, host, nil)
+				LocalForward(state, s, remote, host, nil, rf.proxyProtocol)
 			}()
 		}
 	}()
@@ -98,53 +99,119 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf *FwdAddr, doneChannel <-ch
 			}
 
 			go func() {
-				LocalForward(state, s, remote, host, buf[:n])
+				LocalForward(state, s, remote, host, buf[:n], rf.proxyProtocol)
 			}()
 		}
 	}()
 	return &UDPListner{srv}, nil
 }
 
-func LocalForward(state *State, s *stack.Stack, host KaConn, gaddr net.Addr, buf []byte) {
-	raddr := host.RemoteAddr()
+func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, buf []byte, proxyProtocol bool) {
+	var (
+		err       error
+		raddr     = local.RemoteAddr()
+		ppSrc     net.Addr
+		sppHeader []byte
+	)
+	if proxyProtocol && buf == nil {
+		buf = make([]byte, 4096)
+		n, err := local.Read(buf)
+		if err != nil {
+			goto pperror
+		}
+		buf = buf[:n]
+	}
+
+	if proxyProtocol {
+		var (
+			n int
+		)
+		if gaddr.Network() == "tcp" {
+			n, ppSrc, _, err = DecodePP(buf)
+			buf = buf[n:]
+		} else {
+			n, ppSrc, _, err = DecodeSPP(buf)
+			sppHeader = make([]byte, n)
+			copy(sppHeader, buf[:n])
+			buf = buf[n:]
+		}
+		if err != nil {
+			goto pperror
+		}
+	}
+
+	{
+		var (
+			srcIP    net.Addr
+			ppPrefix = ""
+		)
+		if proxyProtocol == false {
+			// When doing local forward, if the source IP of local
+			// connection had routable IP (unlike
+			// 127.0.0.1)... well... spoof it! The client might find it
+			// useful who launched the connection in the first place.
+			if IPNetContains(state.RoutingDeny, netAddrIP(raddr)) == false {
+				srcIP = raddr
+			}
+		} else {
+			ppPrefix = "PP "
+			if IPNetContains(state.RoutingDeny, netAddrIP(ppSrc)) == true {
+				err = errors.New("PP denied by routingdeny")
+				goto pperror
+			}
+			srcIP = ppSrc
+			// It's very nice the proxy-protocol gave us
+			// client port number, but we don't want
+			// it. Spoofing the same port number on our
+			// side is not safe, useless, confusing and
+			// very bug prone.
+			netAddrSetPort(srcIP, 0)
+		}
+
+		if logConnections {
+			fmt.Printf("[+] %s://%s/%s/%s local-fwd %sconn\n",
+				gaddr.Network(),
+				raddr,
+				local.LocalAddr(),
+				gaddr.String(),
+				ppPrefix)
+		}
+
+		guest, err := GonetDial(s, srcIP, gaddr)
+
+		if buf != nil {
+			guest.Write(buf)
+		}
+
+		var pe ProxyError
+		if err != nil {
+			SetResetOnClose(local)
+			local.Close()
+			pe.LocalRead = fmt.Errorf("%s", err)
+			pe.First = 0
+		} else {
+			pe = connSplice(local, guest, sppHeader)
+		}
+		if logConnections {
+			fmt.Printf("[-] %s://%s/%s/%s local-fwd %sdone: %s\n",
+				gaddr.Network(),
+				raddr,
+				local.LocalAddr(),
+				gaddr.String(),
+				ppPrefix,
+				pe)
+		}
+	}
+	return
+pperror:
 	if logConnections {
-		fmt.Printf("[+] %s://%s/%s/%s local-fwd conn\n",
+		fmt.Printf("[!] %s://%s/%s/%s local-fwd PP error: %s\n",
 			gaddr.Network(),
 			raddr,
-			host.LocalAddr(),
-			gaddr.String())
+			local.LocalAddr(),
+			gaddr.String(),
+			err)
 	}
-	var srcIP net.Addr
-	// When doing local forward, if the source IP of local
-	// connection had routable IP (unlike
-	// 127.0.0.1)... well... spoof it! The client might find it
-	// useful who launched the connection in the first place.
-	if IPNetContains(state.RoutingDeny, netAddrIP(raddr)) == false {
-		srcIP = raddr
-	}
-
-	local, err := GonetDial(s,
-		srcIP,
-		gaddr)
-
-	if buf != nil {
-		local.Write(buf)
-	}
-
-	var pe ProxyError
-	if err != nil {
-		SetResetOnClose(host)
-		host.Close()
-		pe.LocalRead = fmt.Errorf("%s", err)
-		pe.First = 0
-	} else {
-		pe = connSplice(local, host)
-	}
-	if logConnections {
-		fmt.Printf("[-] %s://%s/%s/%s local-fwd done: %s\n",
-			gaddr.Network(),
-			raddr,
-			host.LocalAddr(),
-			gaddr.String(), pe)
-	}
+	local.Close()
+	return
 }

@@ -1,6 +1,7 @@
 from . import base
 from . import utils
 import os
+import struct
 import unittest
 
 
@@ -148,6 +149,8 @@ class RoutingTest(base.TestCase):
         with self.guest_netns():
             s = utils.connect(port=echo_port, ip="192.168.1.100", udp=True)
             s.sendall(b"ala")
+            # We need to do a sync here due to UDP race condition
+            self.assertIn("Routing conn new", p.stdout_line())
             s.sendall(b"ma")
             s.sendall(b"kota")
             self.assertEqual(b"ala", s.recv(1024))
@@ -351,7 +354,7 @@ class LocalForwardingTest(base.TestCase):
             self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
         s = utils.connect(port=port, ip="127.0.0.1", udp=True)
         s.sendall(b"ala")
-        # TODO: we need to do a sync here due to MagicDialUDP race condition
+        # We need to do a sync here due to MagicDialUDP race condition
         self.assertIn("local-fwd conn", p.stdout_line())
         self.assertEqual(b"ala", s.recv(1024))
         s.sendall(b"ma")
@@ -359,3 +362,74 @@ class LocalForwardingTest(base.TestCase):
         self.assertEqual(b"ma", s.recv(1024))
         self.assertEqual(b"kota", s.recv(1024))
         s.close()
+
+
+class LocalForwardingPPTest(base.TestCase):
+    def test_tcp_pp_local_fwd(self):
+        '''  Test inbound TCP proxy-protocol '''
+        g_echo_port, read_log = self.start_tcp_echo(guest=True, log=True)
+        p = self.prun("-L tcppp://0:10.0.2.100:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local PP listen")
+
+        with self.guest_netns():
+            self.assertTcpEcho(ip="127.0.0.1", port=g_echo_port)
+            self.assertIn("127.0.0.1", read_log())
+
+        s = utils.connect(port=port, ip="127.0.0.1")
+        s.sendall(b"PROXY TCP4 1.2.3.4 4.3.2.1 1 2\r\n")
+        self.assertIn("local-fwd PP conn", p.stdout_line())
+        s.sendall(b"alamakota")
+        self.assertEqual(b"alamakota", s.recv(1024))
+        s.close()
+        self.assertIn("1.2.3.4", read_log())
+        self.assertIn("local-fwd PP done", p.stdout_line())
+
+        s = utils.connect(port=port, ip="127.0.0.1")
+        s.sendall(b"PROXY TCP4 4.4.4.4 4.3.2.1 1 2\r\nalama")
+        self.assertIn("local-fwd PP conn", p.stdout_line())
+        s.sendall(b"kota")
+        self.assertIn("4.4.4.4", read_log())
+        b = b""
+        while len(b) < 8:
+            b += s.recv(1024)
+        self.assertEqual(b"alamakota", b)
+        s.close()
+
+    def test_udp_spp_local_fwd(self):
+        '''  Test inbound SPP '''
+        g_echo_port, read_log = self.start_udp_echo(guest=True, log=True)
+        p = self.prun("-L udpspp://0:10.0.2.100:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local PP listen")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
+            self.assertIn("127.0.0.1", read_log())
+
+        s = utils.connect(port=port, ip="127.0.0.1", udp=True)
+        sppheader = struct.pack("!HIIIIIIIIHH", 0x56ec,
+                              0,0,0xffff,0x01020304,
+                              0,0,0xffff,0x04030201,
+                              1,2)
+        s.sendall(sppheader + b"alamakota")
+        self.assertIn("local-fwd PP conn", p.stdout_line())
+        self.assertEqual(b"alamakota", s.recv(1024)[38:])
+        adr = read_log()
+        self.assertIn("1.2.3.4", adr)
+
+        s.sendall(b'\x00'*38 + b"alamakota2")
+        self.assertEqual(b"alamakota2", s.recv(1024)[38:])
+        self.assertEqual(adr, read_log())
+        s.close()
+
+        s = utils.connect(port=port, ip="127.0.0.1", udp=True)
+        sppheader = struct.pack("!HIIIIIIIIHH", 0x56ec,
+                              0,0,0xffff,0x04040404,
+                              0,0,0xffff,0x04030201,
+                              1,2)
+        s.sendall(sppheader + b"kotamaala")
+        self.assertIn("local-fwd PP conn", p.stdout_line())
+        self.assertEqual(b"kotamaala", s.recv(1024)[38:])
+        s.close()
+        self.assertIn("4.4.4.4", read_log())

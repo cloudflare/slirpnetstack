@@ -122,7 +122,7 @@ func RoutingForward(guest KaConn, loc net.Addr) {
 		case *net.UDPConn:
 			host = &KaUDPConn{Conn: v}
 		}
-		pe = connSplice(guest, host)
+		pe = connSplice(guest, host, nil)
 	}
 	if logConnections {
 		fmt.Printf("[-] %s://%s/%s Routing conn done: %s\n",
@@ -157,7 +157,7 @@ func RemoteForward(guest KaConn, rf *FwdAddr) {
 		case *net.UDPConn:
 			host = &KaUDPConn{Conn: v}
 		}
-		pe = connSplice(guest, host)
+		pe = connSplice(guest, host, nil)
 	}
 	if logConnections {
 		fmt.Printf("[-] %s://%s/%s %s-remote-fwd conn done: %s\n",

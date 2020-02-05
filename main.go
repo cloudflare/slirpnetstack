@@ -176,9 +176,15 @@ func Main() int {
 			fmt.Fprintf(os.Stderr, "[!] Failed to listen on %s://%s:%d: %s\n",
 				lf.network, lf.bind.Addr, lf.bind.Port, err)
 		} else {
+			ppPrefix := ""
+			if lf.proxyProtocol {
+				ppPrefix = "PP "
+			}
 			laddr := srv.Addr()
-			fmt.Printf("[+] local-fwd Local listen %s://%s\n",
-				laddr.Network(), laddr.String())
+			fmt.Printf("[+] local-fwd Local %slisten %s://%s\n",
+				ppPrefix,
+				laddr.Network(),
+				laddr.String())
 		}
 	}
 

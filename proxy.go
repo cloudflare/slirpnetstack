@@ -47,8 +47,15 @@ type Closer interface {
 	CloseWrite() error
 }
 
-func proxyOneFlow(in, out KaConn, readErrPtr, writeErrPtr *error, doneCh chan int, scDir int) {
-	buf := make([]byte, MINPROXYBUFSIZE)
+func proxyOneFlow(
+	in, out KaConn,
+	readErrPtr, writeErrPtr *error,
+	doneCh chan int,
+	scDir int, sppHeader []byte) {
+	var (
+		tmpBuf []byte
+		buf    = make([]byte, MINPROXYBUFSIZE)
+	)
 
 	for {
 		n, err := in.Read(buf[:])
@@ -57,9 +64,29 @@ func proxyOneFlow(in, out KaConn, readErrPtr, writeErrPtr *error, doneCh chan in
 			break
 		}
 
+		wbuf := buf[:n]
+		if sppHeader != nil {
+			if scDir == 0 {
+				if len(wbuf) >= len(sppHeader) {
+					wbuf = wbuf[len(sppHeader):]
+				} else {
+					// swallow the packet on error
+					continue
+				}
+			}
+			if scDir == 1 {
+				if cap(tmpBuf) < cap(buf) {
+					tmpBuf = make([]byte, cap(buf))
+				}
+				copy(tmpBuf, sppHeader)
+				copy(tmpBuf[len(sppHeader):], wbuf)
+				wbuf = tmpBuf[:len(sppHeader)+len(wbuf)]
+			}
+		}
+
 		// Write must return n==len(buf) or err
 		// https://golang.org/pkg/io/#Writer
-		_, err = out.Write(buf[:n])
+		_, err = out.Write(wbuf)
 		if err != nil {
 			*writeErrPtr = err
 			break
@@ -90,7 +117,7 @@ func proxyOneFlow(in, out KaConn, readErrPtr, writeErrPtr *error, doneCh chan in
 	doneCh <- scDir
 }
 
-func connSplice(local KaConn, remote KaConn) ProxyError {
+func connSplice(local KaConn, remote KaConn, sppHeader []byte) ProxyError {
 	var (
 		pe     ProxyError
 		doneCh = make(chan int, 2)
@@ -100,9 +127,9 @@ func connSplice(local KaConn, remote KaConn) ProxyError {
 	remote.SetTimeouts(125*time.Second, 4)
 
 	go proxyOneFlow(local, remote, &pe.LocalRead,
-		&pe.RemoteWrite, doneCh, 0)
+		&pe.RemoteWrite, doneCh, 0, sppHeader)
 	proxyOneFlow(remote, local, &pe.RemoteRead,
-		&pe.LocalWrite, doneCh, 1)
+		&pe.LocalWrite, doneCh, 1, sppHeader)
 	first := <-doneCh
 	_ = <-doneCh
 	switch {

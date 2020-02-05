@@ -68,11 +68,18 @@ func (f *FwdAddrSlice) Set(value string) error {
 	}
 
 	var fwa FwdAddr
-	if network == "udprpc" {
+	switch network {
+	case "udprpc":
 		fwa.network = "udp"
 		fwa.kaEnable = true
 		fwa.kaInterval = 0
-	} else {
+	case "udpspp":
+		fwa.network = "udp"
+		fwa.proxyProtocol = true
+	case "tcppp":
+		fwa.network = "tcp"
+		fwa.proxyProtocol = true
+	default:
 		fwa.network = network
 	}
 
@@ -206,6 +213,15 @@ func netAddrIP(a net.Addr) net.IP {
 		return v.IP
 	}
 	return nil
+}
+
+func netAddrSetPort(a net.Addr, port int) {
+	switch v := a.(type) {
+	case *net.TCPAddr:
+		v.Port = port
+	case *net.UDPAddr:
+		v.Port = port
+	}
 }
 
 // Addr that can be set from flag.Var. For example:
