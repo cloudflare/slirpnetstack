@@ -108,10 +108,10 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf *FwdAddr, doneChannel <-ch
 
 func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, buf []byte, proxyProtocol bool) {
 	var (
-		err       error
-		raddr     = local.RemoteAddr()
-		ppSrc     net.Addr
-		sppHeader []byte
+		err          error
+		raddr        = local.RemoteAddr()
+		ppSrc, ppDst net.Addr
+		sppHeader    []byte
 	)
 	if proxyProtocol && buf == nil {
 		buf = make([]byte, 4096)
@@ -127,10 +127,10 @@ func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, bu
 			n int
 		)
 		if gaddr.Network() == "tcp" {
-			n, ppSrc, _, err = DecodePP(buf)
+			n, ppSrc, ppDst, err = DecodePP(buf)
 			buf = buf[n:]
 		} else {
-			n, ppSrc, _, err = DecodeSPP(buf)
+			n, ppSrc, ppDst, err = DecodeSPP(buf)
 			sppHeader = make([]byte, n)
 			copy(sppHeader, buf[:n])
 			buf = buf[n:]
@@ -155,17 +155,36 @@ func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, bu
 			}
 		} else {
 			ppPrefix = "PP "
-			if IPNetContains(state.RoutingDeny, netAddrIP(ppSrc)) == true {
+			if IPNetContains(state.RoutingDeny, netAddrIP(ppSrc)) == false {
+				srcIP = ppSrc
+			} else {
 				err = errors.New("PP denied by routingdeny")
 				goto pperror
 			}
-			srcIP = ppSrc
-			// It's very nice the proxy-protocol gave us
-			// client port number, but we don't want
-			// it. Spoofing the same port number on our
-			// side is not safe, useless, confusing and
-			// very bug prone.
-			netAddrSetPort(srcIP, 0)
+		}
+
+		if srcIP != nil {
+			// It's very nice the proxy-protocol (or just
+			// client) gave us client port number, but we
+			// don't want it. Spoofing the same port
+			// number on our side is not safe, useless,
+			// confusing and very bug prone.
+			srcIP = netAddrSetPort(srcIP, 0)
+
+		}
+
+		if netAddrPort(gaddr) == 0 {
+			// If the guest has dport equal to zero, fill
+			// it up somehow. First guess - use dport of
+			// local connection.
+			localPort := netAddrPort(local.LocalAddr())
+
+			// Alternatively if we got dport from PP, use that
+			if ppDst != nil {
+				localPort = netAddrPort(ppDst)
+			}
+
+			gaddr = netAddrSetPort(gaddr, localPort)
 		}
 
 		if logConnections {

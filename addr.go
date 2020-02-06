@@ -215,13 +215,28 @@ func netAddrIP(a net.Addr) net.IP {
 	return nil
 }
 
-func netAddrSetPort(a net.Addr, port int) {
+func netAddrPort(a net.Addr) int {
 	switch v := a.(type) {
 	case *net.TCPAddr:
-		v.Port = port
+		return v.Port
 	case *net.UDPAddr:
-		v.Port = port
+		return v.Port
 	}
+	return 0
+}
+
+func netAddrSetPort(a net.Addr, port int) net.Addr {
+	switch v := a.(type) {
+	case *net.TCPAddr:
+		x := *v
+		x.Port = port
+		return &x
+	case *net.UDPAddr:
+		x := *v
+		x.Port = port
+		return &x
+	}
+	return nil
 }
 
 // Addr that can be set from flag.Var. For example:

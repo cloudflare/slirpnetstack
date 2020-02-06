@@ -436,8 +436,29 @@ class LocalForwardingPPTest(base.TestCase):
         self.assertEqual(b"alamakota", b)
         s.close()
 
+    def test_tcp_pp_local_fwd_noport(self):
+        '''Test inbound TCP proxy-protocol, while specifying zero port on the
+        guest side'''
+        g_echo_port, read_log = self.start_tcp_echo(guest=True, log=True)
+        p = self.prun("-L tcppp://0:10.0.2.100:0" )
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local PP listen")
+
+        with self.guest_netns():
+            self.assertTcpEcho(ip="127.0.0.1", port=g_echo_port)
+            self.assertIn("127.0.0.1", read_log())
+
+        s = utils.connect(port=port, ip="127.0.0.1")
+        s.sendall(b"PROXY TCP4 1.2.3.4 4.3.2.1 1 %d\r\n" % (g_echo_port,))
+        self.assertIn("local-fwd PP conn", p.stdout_line())
+        s.sendall(b"alamakota")
+        self.assertEqual(b"alamakota", s.recv(1024))
+        s.close()
+        self.assertIn("1.2.3.4", read_log())
+        self.assertIn("local-fwd PP done", p.stdout_line())
+
     def test_udp_spp_local_fwd(self):
-        '''  Test inbound SPP '''
+        '''Test inbound UDP SPP. Read more in https://developers.cloudflare.com/spectrum/getting-started/proxy-protocol/#enabling-simple-proxy-protocol-for-udp'''
         g_echo_port, read_log = self.start_udp_echo(guest=True, log=True)
         p = self.prun("-L udpspp://0:10.0.2.100:%s" % g_echo_port)
         self.assertStartSync(p)
