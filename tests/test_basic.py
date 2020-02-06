@@ -17,6 +17,24 @@ class BasicTest(base.TestCase):
         e = p.stderr_line()
         self.assertIn("Usage of ", e)
 
+    def test_net(self):
+        ''' Basic test if -net parses succesfully. '''
+        p = self.prun("-net 12.12.0.1/23")
+        self.assertStartSync(p)
+        p.close()
+        p = self.prun("-net 12.12.foo/23")
+        self.assertIn("invalid CIDR", p.stderr_line())
+        p = self.prun("-net 12.12.32.23")
+        self.assertIn("invalid CIDR", p.stderr_line())
+
+        p = self.prun("-net6 2002:1::2/32")
+        self.assertStartSync(p)
+        p.close()
+        p = self.prun("-net6 2002:1::foo/32")
+        self.assertIn("invalid CIDR", p.stderr_line())
+        p = self.prun("-net6 2002:1::2")
+        self.assertIn("invalid CIDR", p.stderr_line())
+
     def test_basic_ping(self):
         ''' Due to how netstack is configured, we will answer to ping against
         any IP. Let's test it!.

@@ -30,10 +30,13 @@ var (
 	metricAddr     AddrFlags
 	gomaxprocs     int
 	pcapPath       string
+	net4, net6     string
 	logPkt         bool
 )
 
 func init() {
+	flag.StringVar(&net4, "net", "10.0.2.2/24", "IPv4 CIDR")
+	flag.StringVar(&net6, "net6", "2001:2::2/32", "IPv6 CIDR")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -55,6 +58,9 @@ func main() {
 type State struct {
 	RoutingDeny  []*net.IPNet
 	RoutingAllow []*net.IPNet
+
+	Host, Host6 net.IP
+	Net, Net6   *net.IPNet
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
@@ -78,6 +84,15 @@ func Main() int {
 	// duplicated items in list, ensure parsing is done only once.
 	if flag.Parsed() == false {
 		flag.Parse()
+	}
+
+	if state.Host, state.Net, err = net.ParseCIDR(net4); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to parse -net: %s\n", err)
+		return 1
+	}
+	if state.Host6, state.Net6, err = net.ParseCIDR(net6); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to parse -net6: %s\n", err)
+		return 1
 	}
 
 	if gomaxprocs > 0 {
@@ -177,10 +192,10 @@ func Main() int {
 
 	}
 
-	StackRoutingSetup(s, 1, "10.0.2.2/24")
+	StackRoutingSetup(s, 1, state.Host, state.Net)
 	StackPrimeArp(s, 1, netParseIP("10.0.2.100"))
 
-	StackRoutingSetup(s, 1, "2001:2::2/32")
+	StackRoutingSetup(s, 1, state.Host6, state.Net6)
 
 	doneChannel := make(chan bool)
 
