@@ -83,7 +83,7 @@ func (f *FwdAddrSlice) Set(value string) error {
 		fwa.network = network
 	}
 
-	p = strings.Split(rest, ":")
+	p = SplitHostPort(rest)
 	switch len(p) {
 	case 1:
 		bindPort = p[0]
@@ -292,4 +292,25 @@ func AddrFromString(value string) (net.Addr, error) {
 		return nil, fmt.Errorf("Address must be in form net://address, where net is one of unix/tcp/udp")
 	}
 	return addr, nil
+}
+
+func SplitHostPort(buf string) []string {
+	sliceOfParts := make([]string, 0)
+	part := make([]byte, 0)
+	in := false
+	for _, c := range []byte(buf) {
+		switch {
+		case in == false && c == '[':
+			in = true
+		case in == true && c == ']':
+			in = false
+		case in == false && c == ':':
+			sliceOfParts = append(sliceOfParts, string(part))
+			part = make([]byte, 0)
+		default:
+			part = append(part, c)
+		}
+	}
+	sliceOfParts = append(sliceOfParts, string(part))
+	return sliceOfParts
 }

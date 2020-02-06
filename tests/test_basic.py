@@ -494,3 +494,23 @@ class LocalForwardingPPTest(base.TestCase):
         self.assertEqual(b"kotamaala", s.recv(1024)[38:])
         s.close()
         self.assertIn("4.4.4.4", read_log())
+
+    def test_tcp_pp_local_fwd_v6(self):
+        '''  Test inbound TCP v6 proxy-protocol '''
+        g_echo_port, read_log = self.start_tcp_echo(guest=True, log=True)
+        p = self.prun("-L tcppp://[::1]:0:[2001:2::100]:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local PP listen")
+
+        with self.guest_netns():
+            self.assertTcpEcho(ip="::1", port=g_echo_port)
+            self.assertIn("::1", read_log())
+
+        s = utils.connect(port=port, ip="::1")
+        s.sendall(b"PROXY TCP4 abcd::1 dcba::1 1 2\r\n")
+        self.assertIn("local-fwd PP conn", p.stdout_line())
+        s.sendall(b"alamakota")
+        self.assertEqual(b"alamakota", s.recv(1024))
+        s.close()
+        self.assertIn("abcd::1", read_log())
+        self.assertIn("local-fwd PP done", p.stdout_line())
