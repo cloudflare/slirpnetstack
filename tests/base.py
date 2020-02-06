@@ -4,13 +4,14 @@ import errno
 import functools
 import io
 import os
+import random
 import re
 import shlex
 import signal
 import socket
 import subprocess
+import tempfile
 import unittest
-import random
 
 LIBC = ctypes.CDLL("libc.so.6")
 SLIRPNETSTACKBIN = os.environ.get('SLIRPNETSTACKBIN')
@@ -114,6 +115,9 @@ class TestCase(unittest.TestCase):
         self._add_teardown(p)
         return p
 
+    def get_tmp_filename(self, name):
+        return os.path.join(self._tmpdir.name, name)
+
     def _add_teardown(self, item):
         if not self.cleanups:
             self.cleanups = []
@@ -142,6 +146,8 @@ class TestCase(unittest.TestCase):
         self._add_teardown(w)
         LIBC.setns(prev_net_fd.fileno(), CLONE_NEWNET)
         prev_net_fd.close()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._add_teardown(self._tmpdir)
 
     def tearDown(self):
         while self.cleanups:
@@ -157,6 +163,8 @@ class TestCase(unittest.TestCase):
                     item.stderr.close()
             elif isinstance(item, io.BufferedReader):
                 item.close()
+            elif isinstance(item, tempfile.TemporaryDirectory):
+                item.cleanup()
             else:
                 print("[!] Unknown cleanup type")
                 print(type(item))
@@ -223,9 +231,10 @@ class TestCase(unittest.TestCase):
             s.recv(1024)
         self.assertEqual(e.exception.errno, errno.ECONNREFUSED)
 
-    def assertStartSync(self, p):
-        self.assertIn("[.] Join", p.stderr_line())
-        self.assertIn("[.] Opening tun", p.stderr_line())
+    def assertStartSync(self, p, fd=False):
+        if not fd:
+            self.assertIn("[.] Join", p.stderr_line())
+            self.assertIn("[.] Opening tun", p.stderr_line())
         self.assertIn("Started", p.stderr_line())
 
     def assertListenLine(self, p, in_pattern):

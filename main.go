@@ -19,8 +19,10 @@ import (
 )
 
 var (
+	fd             int
 	netNsPath      string
 	ifName         string
+	mtu            uint
 	remoteFwd      FwdAddrSlice
 	localFwd       FwdAddrSlice
 	logConnections bool
@@ -31,8 +33,10 @@ var (
 )
 
 func init() {
+	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
+	flag.UintVar(&mtu, "mtu", 0, "MTU (default: 1500 for -fd, auto for -netns)")
 	flag.Var(&remoteFwd, "R", "Connections to remote side forwarded local")
 	flag.Var(&localFwd, "L", "Connections to local side forwarded remote")
 	flag.BoolVar(&quiet, "quiet", false, "Print less stuff on screen")
@@ -58,6 +62,7 @@ func Main() int {
 	var (
 		state   State
 		linkEP  stack.LinkEndpoint
+		tapMode bool             = true
 		mac     net.HardwareAddr = MustParseMAC("70:71:aa:4b:29:aa")
 		metrics *Metrics
 		err     error
@@ -125,9 +130,18 @@ func Main() int {
 		}
 	}
 
-	tunFd, tapMode, tapMtu, err := GetTunTap(netNsPath, ifName)
-	if err != nil {
-		return -1
+	if fd == -1 {
+		fd, tapMode, mtu, err = GetTunTap(netNsPath, ifName)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to open TUN/TAP: %s", err))
+		}
+	} else {
+		if netNsPath != "" {
+			panic("Please specify either -fd or -netns")
+		}
+		if mtu == 0 {
+			mtu = 1500
+		}
 	}
 
 	// With high mtu, low packet loss and low latency over tuntap,
@@ -137,7 +151,7 @@ func Main() int {
 
 	s := NewStack(bufSize, bufSize)
 
-	if linkEP, err = createLinkEP(s, tunFd, tapMode, mac, tapMtu); err != nil {
+	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu)); err != nil {
 		panic(fmt.Sprintf("Failed to create linkEP: %s", err))
 	}
 
@@ -146,7 +160,7 @@ func Main() int {
 		if err != nil {
 			panic(fmt.Sprintf("Failed to open PCAP file: %s", err))
 		}
-		if linkEP, err = sniffer.NewWithFile(linkEP, pcapFile, tapMtu); err != nil {
+		if linkEP, err = sniffer.NewWithFile(linkEP, pcapFile, uint32(mtu)); err != nil {
 			panic(fmt.Sprintf("Failed to sniff linkEP: %s", err))
 		}
 		defer pcapFile.Close()
