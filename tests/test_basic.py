@@ -4,6 +4,7 @@ import os
 import socket
 import struct
 import unittest
+import urllib.request
 
 
 class BasicTest(base.TestCase):
@@ -41,7 +42,9 @@ class BasicTest(base.TestCase):
             self.assertEqual(header[0], 0xa1b2c3d4)
             data = f.read(16)
             (seconds, useconds, captured_length, packet_length) = struct.unpack(">LLLL", data)
-            self.assertEqual(captured_length, 28)
+            # we generally expect icmp echo request at 28 bytes, but
+            # sometimes see some other packet at 76 bytes (arp?)
+            self.assertIn(captured_length, (28,76))
 
     def test_fd(self):
         ''' Check inherinting tuntap fd with -fd option '''
@@ -113,6 +116,15 @@ class BasicTest(base.TestCase):
             # 1.1.1.1 resolver. Doesn't matter - will be terminated by netstack
             r = os.system("ping6 -q 2606:4700:4700::1111 -c 1 -n > /dev/null")
             self.assertEqual(r, 0)
+
+    def test_metric(self):
+        ''' Test if metrics server run. '''
+        p = self.prun("-m tcp://127.0.0.1:0")
+        e = p.stderr_line()
+        self.assertIn("Running metrics ", e)
+        metrics_port = int(e.rsplit(':')[-1].rstrip())
+        f = urllib.request.urlopen('http://127.0.0.1:%d/debug/pprof' % (metrics_port,))
+        self.assertIn(b"Types of profiles available:", f.read(300))
 
 
 class RoutingTest(base.TestCase):
