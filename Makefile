@@ -1,12 +1,17 @@
 export GOPRIVATE := code.cfops.it
 IMPORT_PATH := github.com/majek/slirpnetstack
+GOFLAGS=-ldflags=-compressdwarf=false
 
 bin/slirpnetstack: *.go go.mod
-	go build -o $@ $(IMPORT_PATH)
+	go build \
+		$(GOFLAGS) \
+		-o $@ \
+		$(IMPORT_PATH)
 
 
 bin/slirpnetstack.cover: *.go go.mod
 	go test \
+		$(GOFLAGS) \
 		-coverpkg="$(IMPORT_PATH)" \
 		-c \
 		-o bin/slirpnetstack.cover \
