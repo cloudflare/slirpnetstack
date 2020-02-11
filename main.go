@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+	golog "log"
 	"math/rand"
 	"net"
 	"os"
@@ -31,12 +33,14 @@ var (
 	gomaxprocs     int
 	pcapPath       string
 	net4, net6     string
+	dhcpDns        string
 	logPkt         bool
 )
 
 func init() {
 	flag.StringVar(&net4, "net", "10.0.2.2/24", "IPv4 CIDR")
 	flag.StringVar(&net6, "net6", "2001:2::2/32", "IPv6 CIDR")
+	flag.StringVar(&dhcpDns, "dhcp-dns", "", "Set DHCP DNS (read from /etc/resolv.conf by default)")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -61,6 +65,9 @@ type State struct {
 
 	Host, Host6 net.IP
 	Net, Net6   *net.IPNet
+
+	DHCPStart, DHCPEnd net.IP
+	DHCPDns            *dnsConfig
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
@@ -93,6 +100,16 @@ func Main() int {
 	if state.Host6, state.Net6, err = net.ParseCIDR(net6); err != nil {
 		fmt.Fprintf(os.Stderr, "[!] Failed to parse -net6: %s\n", err)
 		return 1
+	}
+
+	state.DHCPStart = append(state.DHCPStart, state.Host.To4()...)
+	state.DHCPStart[3] = 15
+	state.DHCPEnd = append(state.DHCPEnd, state.Host.To4()...)
+	state.DHCPEnd[3] = 100
+	if dhcpDns != "" {
+		state.DHCPDns = &dnsConfig{servers: []string{dhcpDns}}
+	} else {
+		state.DHCPDns = dnsReadConfig("/etc/resolv.conf")
 	}
 
 	if gomaxprocs > 0 {
@@ -198,6 +215,13 @@ func Main() int {
 	StackRoutingSetup(s, 1, state.Host6, state.Net6)
 
 	doneChannel := make(chan bool)
+
+	// Silence insomniacslk/dhcp...
+	golog.SetOutput(ioutil.Discard)
+	if err = setupDHCP(s, &state); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to setup DHCP: %s\n", err)
+		return 1
+	}
 
 	for _, lf := range localFwd {
 		var srv Listener

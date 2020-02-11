@@ -1,5 +1,6 @@
 from . import base
 from . import utils
+from ipaddress import IPv4Address
 import os
 import socket
 import struct
@@ -566,3 +567,58 @@ class LocalForwardingPPTest(base.TestCase):
         s.close()
         self.assertIn("abcd::1", read_log())
         self.assertIn("local-fwd PP done", p.stdout_line())
+
+class DHCPTest(base.TestCase):
+    @base.withScapy()
+    def test_dhcp_v4(self, s):
+        ''' Test DHCPv4 discover '''
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+         # BOOTREPLY
+        self.assertEqual(pkt[BOOTP].op, 2)
+        addr = IPv4Address(pkt[BOOTP].yiaddr)
+        self.assertGreaterEqual(addr, IPv4Address('10.0.2.15'))
+        self.assertLess(addr, IPv4Address('10.0.2.100'))
+        for o in pkt[DHCP].options:
+            if o[0] in ('router', 'server_id'):
+                self.assertEqual(o[1], '10.0.2.2')
+        opts = [o[0] for o in pkt[DHCP].options if isinstance(o, tuple)]
+        self.assertIn('router', opts)
+        self.assertIn('name_server', opts)
+        self.assertIn('lease_time', opts)
+        self.assertIn('server_id', opts)
+
+    @base.withScapy()
+    def dhcp_and_net(self, s):
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+         # BOOTREPLY
+        self.assertEqual(pkt[BOOTP].op, 2)
+        addr = IPv4Address(pkt[BOOTP].yiaddr)
+        self.assertGreaterEqual(addr, IPv4Address('12.34.56.15'))
+        self.assertLess(addr, IPv4Address('12.34.56.100'))
+
+    def test_dhcp_and_net(self):
+        ''' Test DHCPv4 and -net '''
+        self.dhcp_and_net(parg='-net 12.34.56.1/16')
+
+    @base.withScapy()
+    def dhcp_dns(self, s):
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+         # BOOTREPLY
+        for o in pkt[DHCP].options:
+            if o[0] == 'name_server':
+                self.assertEqual(o[1], '8.8.8.8')
+                return
+        self.fail()
+
+    def test_dhcp_dns(self):
+        ''' Test DHCPv4 DNS option '''
+        self.dhcp_dns(parg='-dhcp-dns 8.8.8.8')
