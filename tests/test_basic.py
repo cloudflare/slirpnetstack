@@ -6,6 +6,7 @@ import struct
 import unittest
 import urllib.request
 
+from scapy.all import *
 
 class BasicTest(base.TestCase):
     def test_help(self):
@@ -68,6 +69,27 @@ class BasicTest(base.TestCase):
             pong = fd.recv(1024)
             if pong[14+9] == 1 and pong[14+20] == 0: #ICMP and echo reply
                 break
+
+    @base.withScapy()
+    def test_ping(self, s):
+        ''' Test Scapy ping '''
+        pkt = s.sr1(IP(dst="10.0.2.2")/ICMP())
+        self.assertEqual(pkt[ICMP].type, 0)
+
+    @base.withScapy()
+    def _scapy_echo(self, s):
+        from scapy.layers import http
+        get_sc = lambda *args, **kwargs: s
+        l = TCP_client.tcplink(http.HTTP, "192.0.2.5", 80, ll=get_sc, recvsock=get_sc)
+        l.send(http.HTTPRequest())
+        req = l.recv()
+        self.assertIn('GET', req.summary())
+        l.close()
+
+    def test_scapy_echo(self):
+        ''' Test a fancy HTTP request echo with Scapy '''
+        echo_port = self.start_tcp_echo()
+        self._scapy_echo(parg="-R 192.0.2.5:80:127.0.0.1:%s" % echo_port)
 
     def test_basic_connection(self):
         ''' Test connection reset on netstack IP. Netstack is not supposed to
