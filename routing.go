@@ -37,7 +37,7 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 			return
 		}
 
-		xconn := gonet.NewPacketConn(s, &wq, ep)
+		xconn := gonet.NewUDPConn(s, &wq, ep)
 		conn := &KaUDPConn{Conn: xconn}
 
 		if rf != nil && rf.kaEnable && rf.kaInterval == 0 {
@@ -84,7 +84,7 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 		r.Complete(false)
 		ep.SetSockOptInt(tcpip.DelayOption, 0)
 
-		xconn := gonet.NewConn(&wq, ep)
+		xconn := gonet.NewTCPConn(&wq, ep)
 		conn := &GonetTCPConn{xconn, ep}
 
 		go func() {

@@ -213,11 +213,11 @@ func GonetDialTCP(s *stack.Stack, laddr, raddr *tcpip.FullAddress, network tcpip
 		return nil, errors.New(err.String())
 	}
 
-	return &GonetTCPConn{gonet.NewConn(&wq, ep), ep}, nil
+	return &GonetTCPConn{gonet.NewTCPConn(&wq, ep), ep}, nil
 }
 
 type GonetTCPConn struct {
-	*gonet.Conn
+	*gonet.TCPConn
 	ep tcpip.Endpoint
 }
 

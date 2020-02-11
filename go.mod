@@ -9,5 +9,5 @@ require (
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
-	gvisor.dev/gvisor v0.0.0-20200204002841-37bac1411e4b
+	gvisor.dev/gvisor v0.0.0-20200211012324-c9c7eababe54
 )

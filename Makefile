@@ -14,7 +14,7 @@ bin/slirpnetstack.cover: *.go go.mod
 		$(GOFLAGS) \
 		-coverpkg="$(IMPORT_PATH)" \
 		-c \
-		-o bin/slirpnetstack.cover \
+		-o $@ \
 		-tags testrunmain \
 		$(IMPORT_PATH)
 
@@ -69,3 +69,4 @@ $(GOTESTTARGETS): $(wildcard tests/*/*.go)
 update-gomod:
 	go get -u gvisor.dev/gvisor@go all
 	go mod tidy
+	$(MAKE) bin/gocovmerge bin/slirpnetstack bin/slirpnetstack.cover
