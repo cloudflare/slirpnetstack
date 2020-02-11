@@ -30,6 +30,7 @@ var (
 	metricAddr     AddrFlags
 	gomaxprocs     int
 	pcapPath       string
+	logPkt         bool
 )
 
 func init() {
@@ -43,6 +44,7 @@ func init() {
 	flag.Var(&metricAddr, "m", "Metrics addr")
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
+	flag.BoolVar(&logPkt, "logpkt", false, "Log packets")
 }
 
 func main() {
@@ -166,6 +168,10 @@ func Main() int {
 		defer pcapFile.Close()
 	}
 
+	if logPkt {
+		log.SetLevel(log.Debug)
+		linkEP = sniffer.New(linkEP)
+	}
 	if err = createNIC(s, 1, linkEP); err != nil {
 		panic(fmt.Sprintf("Failed to createNIC: %s", err))
 

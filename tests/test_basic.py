@@ -28,6 +28,11 @@ class BasicTest(base.TestCase):
             r = os.system("ping -q 1.1.1.1 -c 1 -n > /dev/null")
             self.assertEqual(r, 0)
 
+    def test_logpkt(self):
+        ''' Check -logpkt '''
+        p = self.prun("-logpkt")
+        self.assertStartSync(p)
+
     def test_pcap(self):
         ''' Check -pcap capture '''
         pcap = self.get_tmp_filename("test.pcap")
