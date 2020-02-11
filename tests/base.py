@@ -243,6 +243,25 @@ class TestCase(unittest.TestCase):
         return int(line.split(":")[-1])
 
 
+def withFd():
+    def decorate(fn):
+        fn_name = fn.__name__
+        @functools.wraps(fn)
+        def maybe(*args, **kw):
+            sp = socket.socketpair(type=socket.SOCK_DGRAM)
+            os.set_inheritable(sp[0].fileno(), True)
+            self = args[0]
+            p = self.prun("-fd %d" % sp[0].fileno(), close_fds=False, netns=False)
+            self.assertStartSync(p, fd=True)
+            kw['fd'] = sp[1]
+            ret = fn(*args, **kw)
+            sp[0].close()
+            sp[1].close()
+            return ret
+        return maybe
+    return decorate
+
+
 def isolateHostNetwork():
     def decorate(fn):
         fn_name = fn.__name__

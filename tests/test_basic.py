@@ -51,12 +51,9 @@ class BasicTest(base.TestCase):
             # sometimes see some other packet at 76 bytes (arp?)
             self.assertIn(captured_length, (28,76))
 
-    def test_fd(self):
+    @base.withFd()
+    def test_fd(self, fd):
         ''' Check inherinting tuntap fd with -fd option '''
-        sp = socket.socketpair(type=socket.SOCK_DGRAM)
-        os.set_inheritable(sp[0].fileno(), True)
-        p = self.prun("-fd %d" % sp[0].fileno(), close_fds=False, netns=False)
-        self.assertStartSync(p, fd=True)
         # 10.0.2.15->10.0.2.2 ICMP Echo (ping) request
         ping = bytes.fromhex('''
         52 55 0a 00 02 02 70 71 aa 4b 29 aa 08 00 45 00
@@ -66,13 +63,11 @@ class BasicTest(base.TestCase):
         16 17 18 19 1a 1b 1c 1d 1e 1f 20 21 22 23 24 25
         26 27 28 29 2a 2b 2c 2d 2e 2f 30 31 32 33 34 35
         36 37'''.replace('\n','').replace(' ', ''))
-        sp[1].sendall(ping)
+        fd.sendall(ping)
         while True:
-            pong = sp[1].recv(1024)
+            pong = fd.recv(1024)
             if pong[14+9] == 1 and pong[14+20] == 0: #ICMP and echo reply
                 break
-        sp[0].close()
-        sp[1].close()
 
     def test_basic_connection(self):
         ''' Test connection reset on netstack IP. Netstack is not supposed to
