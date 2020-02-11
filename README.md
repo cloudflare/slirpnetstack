@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/majek/slirpnetstack.svg?branch=master)](https://travis-ci.org/majek/slirpnetstack) [![Coverage Status](https://coveralls.io/repos/github/majek/slirpnetstack/badge.svg?branch=master)](https://coveralls.io/github/majek/slirpnetstack?branch=master)
+
 slirpnetstack
 =============
 
