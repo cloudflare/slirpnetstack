@@ -12,6 +12,7 @@ import (
 
 	"github.com/coredhcp/coredhcp"
 	"github.com/coredhcp/coredhcp/config"
+	"github.com/coredhcp/coredhcp/handler"
 	"github.com/coredhcp/coredhcp/logger"
 
 	"github.com/coredhcp/coredhcp/plugins"
@@ -22,12 +23,26 @@ import (
 	"github.com/coredhcp/coredhcp/plugins/serverid"
 )
 
+var bootfilePlugin = plugins.Plugin{
+	Name:   "slirp.bootfile",
+	Setup4: bootfile_setup4,
+}
+
 var desiredPlugins = []*plugins.Plugin{
 	&dns.Plugin,
 	&rangepl.Plugin,
 	&router.Plugin,
 	&serverid.Plugin,
 	&nbp.Plugin,
+	&bootfilePlugin,
+}
+
+func bootfile_setup4(args ...string) (handler.Handler4, error) {
+	h := func(req, resp *dhcpv4.DHCPv4) (*dhcpv4.DHCPv4, bool) {
+		resp.BootFileName = args[0]
+		return resp, false
+	}
+	return h, nil
 }
 
 func setupDHCP(s *stack.Stack, state *State) error {
@@ -65,6 +80,14 @@ func setupDHCP(s *stack.Stack, state *State) error {
 			&config.PluginConfig{
 				Name: "nbp",
 				Args: []string{state.DHCPNbp},
+			},
+		)
+	}
+	if state.DHCPBootfile != "" {
+		plugins = append(plugins,
+			&config.PluginConfig{
+				Name: "slirp.bootfile",
+				Args: []string{state.DHCPBootfile},
 			},
 		)
 	}

@@ -643,3 +643,16 @@ class DHCPTest(base.TestCase):
     def test_dhcp_nbp(self):
         ''' Test DHCPv4 NBP option '''
         self.dhcp_nbp(parg='-dhcp-nbp tftp://10.0.0.1/my-nbp')
+
+    @base.withScapy()
+    def dhcp_bootfile(self, s):
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+        # BOOTREPLY
+        self.assertEqual(pkt[BOOTP].file.decode().rstrip('\0'), 'http://boot.netboot.xyz/')
+
+    def test_dhcp_bootfile(self):
+        ''' Test DHCPv4 bootfile option '''
+        self.dhcp_bootfile(parg='-dhcp-bootfile http://boot.netboot.xyz/')
