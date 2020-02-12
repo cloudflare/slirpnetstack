@@ -622,3 +622,24 @@ class DHCPTest(base.TestCase):
     def test_dhcp_dns(self):
         ''' Test DHCPv4 DNS option '''
         self.dhcp_dns(parg='-dhcp-dns 8.8.8.8')
+
+    @base.withScapy()
+    def dhcp_nbp(self, s):
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+        # BOOTREPLY
+        bootFileName=None
+        tftpServerName=None
+        for o in pkt[DHCP].options:
+            if o[0] == 'boot-file-name':
+                bootFileName = o[1].decode()
+            elif o[0] in (66, 'tftp-server-name'): # FIXME: scapy doesn't know that field?
+                tftpServerName = o[1].decode()
+        self.assertEqual(bootFileName, '/my-nbp')
+        self.assertEqual(tftpServerName, '10.0.0.1')
+
+    def test_dhcp_nbp(self):
+        ''' Test DHCPv4 NBP option '''
+        self.dhcp_nbp(parg='-dhcp-nbp tftp://10.0.0.1/my-nbp')

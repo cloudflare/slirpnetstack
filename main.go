@@ -34,6 +34,7 @@ var (
 	pcapPath       string
 	net4, net6     string
 	dhcpDns        string
+	dhcpNbp        string
 	logPkt         bool
 )
 
@@ -41,6 +42,7 @@ func init() {
 	flag.StringVar(&net4, "net", "10.0.2.2/24", "IPv4 CIDR")
 	flag.StringVar(&net6, "net6", "2001:2::2/32", "IPv6 CIDR")
 	flag.StringVar(&dhcpDns, "dhcp-dns", "", "Set DHCP DNS (read from /etc/resolv.conf by default)")
+	flag.StringVar(&dhcpNbp, "dhcp-nbp", "", "Set DHCP NBP URL (ex: tftp://10.0.0.1/my-nbp)")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -68,6 +70,7 @@ type State struct {
 
 	DHCPStart, DHCPEnd net.IP
 	DHCPDns            *dnsConfig
+	DHCPNbp            string
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
@@ -111,6 +114,7 @@ func Main() int {
 	} else {
 		state.DHCPDns = dnsReadConfig("/etc/resolv.conf")
 	}
+	state.DHCPNbp = dhcpNbp
 
 	if gomaxprocs > 0 {
 		runtime.GOMAXPROCS(gomaxprocs)

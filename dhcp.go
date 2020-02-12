@@ -16,6 +16,7 @@ import (
 
 	"github.com/coredhcp/coredhcp/plugins"
 	"github.com/coredhcp/coredhcp/plugins/dns"
+	"github.com/coredhcp/coredhcp/plugins/nbp"
 	rangepl "github.com/coredhcp/coredhcp/plugins/range"
 	"github.com/coredhcp/coredhcp/plugins/router"
 	"github.com/coredhcp/coredhcp/plugins/serverid"
@@ -26,6 +27,7 @@ var desiredPlugins = []*plugins.Plugin{
 	&rangepl.Plugin,
 	&router.Plugin,
 	&serverid.Plugin,
+	&nbp.Plugin,
 }
 
 func setupDHCP(s *stack.Stack, state *State) error {
@@ -58,6 +60,14 @@ func setupDHCP(s *stack.Stack, state *State) error {
 			Name: "server_id",
 			Args: []string{state.Host.String()},
 		})
+	if state.DHCPNbp != "" {
+		plugins = append(plugins,
+			&config.PluginConfig{
+				Name: "nbp",
+				Args: []string{state.DHCPNbp},
+			},
+		)
+	}
 	conf.Server4 = &config.ServerConfig{
 		Plugins: plugins,
 	}
