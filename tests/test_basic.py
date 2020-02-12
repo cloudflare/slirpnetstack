@@ -168,6 +168,16 @@ class BasicTest(base.TestCase):
         self.assertIn(b"Types of profiles available:", f.read(300))
 
 
+    @base.isolateHostNetwork()
+    def test_restrict(self):
+        ''' Test -restrict '''
+        echo_port = self.start_tcp_echo()
+        p = self.prun("-restrict")
+        self.assertStartSync(p)
+        with self.guest_netns():
+            self.assertTcpTimeout(ip="192.168.1.100", port=echo_port)
+
+
 class RoutingTest(base.TestCase):
     @base.isolateHostNetwork()
     def test_tcp_routing(self):

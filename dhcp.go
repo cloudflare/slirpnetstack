@@ -64,10 +64,6 @@ func setupDHCP(s *stack.Stack, state *State) error {
 				"24h"},
 		},
 		&config.PluginConfig{
-			Name: "router",
-			Args: []string{state.Host.String()},
-		},
-		&config.PluginConfig{
 			Name: "dns",
 			Args: state.DHCPDns.servers,
 		},
@@ -75,6 +71,14 @@ func setupDHCP(s *stack.Stack, state *State) error {
 			Name: "server_id",
 			Args: []string{state.Host.String()},
 		})
+	if !state.Restricted {
+		plugins = append(plugins,
+			&config.PluginConfig{
+				Name: "router",
+				Args: []string{state.Host.String()},
+			},
+		)
+	}
 	if state.DHCPNbp != "" {
 		plugins = append(plugins,
 			&config.PluginConfig{

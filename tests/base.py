@@ -233,6 +233,11 @@ class TestCase(unittest.TestCase):
             s.recv(1024)
         self.assertEqual(e.exception.errno, errno.ECONNREFUSED)
 
+    def assertTcpTimeout(self, ip, port):
+        with self.assertRaises(socket.timeout) as e:
+            s = utils.connect(ip, port, cleanup=self)
+            s.recv(1024)
+
     def assertStartSync(self, p, fd=False):
         if not fd:
             self.assertIn("[.] Join", p.stderr_line())

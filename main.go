@@ -37,6 +37,7 @@ var (
 	dhcpBootfile   string
 	dhcpNbp        string
 	logPkt         bool
+	restricted     bool
 )
 
 func init() {
@@ -56,6 +57,7 @@ func init() {
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
 	flag.BoolVar(&logPkt, "logpkt", false, "Log packets")
+	flag.BoolVar(&restricted, "restrict", false, "If this option is enabled, the guest will be isolated, i.e. it will not be able to contact the host and no guest IP packets will be routed over the host to the outside. This option does not affect any explicitly set forwarding rules.")
 }
 
 func main() {
@@ -64,6 +66,7 @@ func main() {
 }
 
 type State struct {
+	Restricted   bool
 	RoutingDeny  []*net.IPNet
 	RoutingAllow []*net.IPNet
 
@@ -98,6 +101,8 @@ func Main() int {
 	if flag.Parsed() == false {
 		flag.Parse()
 	}
+
+	state.Restricted = restricted
 
 	if state.Host, state.Net, err = net.ParseCIDR(net4); err != nil {
 		fmt.Fprintf(os.Stderr, "[!] Failed to parse -net: %s\n", err)
