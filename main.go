@@ -14,6 +14,7 @@ import (
 	"github.com/opencontainers/runc/libcontainer/system"
 	"golang.org/x/sys/unix"
 
+	"github.com/godbus/dbus/v5"
 	"gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -34,6 +35,7 @@ var (
 	gomaxprocs     int
 	pcapPath       string
 	exitWithParent bool
+	dbusAddress    string
 )
 
 func init() {
@@ -48,6 +50,7 @@ func init() {
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
 	flag.BoolVar(&exitWithParent, "exit-with-parent", false, "Exit with parent process")
+	flag.StringVar(&dbusAddress, "dbus-address", "", "DBus bus to connect to")
 }
 
 func main() {
@@ -56,11 +59,15 @@ func main() {
 }
 
 type State struct {
+	stack        *stack.Stack
 	RoutingDeny  []*net.IPNet
 	RoutingAllow []*net.IPNet
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
+
+	dbus   *dbus.Conn
+	quitCh chan bool
 }
 
 func Main() int {
@@ -100,6 +107,7 @@ func Main() int {
 		netParseIP("10.0.2.2"),
 		netParseIP("127.0.0.1"))
 
+	state.quitCh = make(chan bool)
 	state.remoteUdpFwd = make(map[string]*FwdAddr)
 	state.remoteTcpFwd = make(map[string]*FwdAddr)
 	// For the list of reserved IP's see
@@ -154,6 +162,7 @@ func Main() int {
 	bufSize := 4 * 1024 * 1024
 
 	s := NewStack(bufSize, bufSize)
+	state.stack = s
 
 	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu)); err != nil {
 		panic(fmt.Sprintf("Failed to create linkEP: %s", err))
@@ -179,6 +188,11 @@ func Main() int {
 	StackPrimeArp(s, 1, netParseIP("10.0.2.100"))
 
 	StackRoutingSetup(s, 1, "2001:2::2/32")
+
+	if err = setupDBus(&state, dbusAddress); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to setup DBus: %s\n", err)
+		return 1
+	}
 
 	for _, lf := range localFwd {
 		var srv Listener
@@ -232,13 +246,15 @@ func Main() int {
 
 	for {
 		select {
+		case <-state.quitCh:
+			goto stop
 		case sig := <-sigCh:
 			signal.Reset(sig)
-			fmt.Fprintf(os.Stderr, "[-] Closing\n")
 			goto stop
 		}
 	}
 stop:
+	fmt.Fprintf(os.Stderr, "[-] Closing\n")
 	// TODO: define semantics of graceful close on signal
 	//s.Wait()
 	if metrics != nil {

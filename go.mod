@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/godbus/dbus/v5 v5.0.3
 	github.com/golang/protobuf v1.3.3 // indirect
 	github.com/opencontainers/runc v0.1.1
 	github.com/opencontainers/runtime-spec v0.1.2-0.20171211145439-b2d941ef6a78

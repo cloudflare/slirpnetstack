@@ -39,7 +39,7 @@ test: $(SLIRPNETSTACKDEP)
 	SLIRPNETSTACKBIN=$(SLIRPNETSTACKBIN) \
 	PYTHONPATH=. \
 	PYTHONIOENCODING=utf-8 \
-		unshare -Ur python3 -m tests.runner tests
+		unshare -Ur dbus-run-session --config-file=tests/dbus.conf python3 -m tests.runner tests
 
 cover: bin/gocovmerge
 	@-mkdir -p .cover

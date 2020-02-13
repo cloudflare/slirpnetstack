@@ -5,6 +5,7 @@ import socket
 import struct
 import unittest
 import urllib.request
+from pydbus import SessionBus
 
 
 class BasicTest(base.TestCase):
@@ -125,6 +126,18 @@ class BasicTest(base.TestCase):
         metrics_port = int(e.rsplit(':')[-1].rstrip())
         f = urllib.request.urlopen('http://127.0.0.1:%d/debug/pprof' % (metrics_port,))
         self.assertIn(b"Types of profiles available:", f.read(300))
+
+    def test_dbus(self):
+        ''' Test if -dbus-address works. '''
+        if not base.DBUS_SESSION_BUS_ADDRESS:
+            self.skipTest("DBUS_SESSION_BUS_ADDRESS unset")
+        p = self.prun("-dbus-address %s" % base.DBUS_SESSION_BUS_ADDRESS)
+        self.assertStartSync(p)
+        bus = SessionBus()
+        iface = bus.get(".Slirp1_%u" % p.p.pid, "/org/freedesktop/SlirpHelper1")
+        info = iface.GetInfo()
+        self.assertIn("Protocol[State]", info)
+        iface.Quit()
 
 
 class RoutingTest(base.TestCase):
