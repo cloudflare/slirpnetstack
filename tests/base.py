@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 import unittest
 
-from scapy.all import StreamSocket, sndrcv, Ether, conf, Route
+from scapy.all import StreamSocket, sndrcv, Ether, conf, Route, ARP
 
 LIBC = ctypes.CDLL("libc.so.6")
 SLIRPNETSTACKBIN = os.environ.get('SLIRPNETSTACKBIN')
@@ -275,7 +275,10 @@ class testScapySocket(object):
         ss.basecls = Ether
         self.ss = ss
         conf.route = Route() # reinitializes the route based on the NS
-        self.e = Ether(src='52:55:0a:00:02:42', dst='70:71:aa:4b:29:aa')
+        # send a gratious ARP to tell our MAC/IP
+        arp = ARP()
+        self.e = Ether(src=arp.hwsrc, dst='70:71:aa:4b:29:aa')
+        self.send(arp)
 
     def send(self, x):
         self.ss.send(self.e / x)
