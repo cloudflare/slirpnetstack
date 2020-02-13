@@ -36,6 +36,7 @@ var (
 	dhcpDns        string
 	dhcpBootfile   string
 	dhcpNbp        string
+	tftpPath       string
 	logPkt         bool
 	restricted     bool
 )
@@ -58,6 +59,7 @@ func init() {
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
 	flag.BoolVar(&logPkt, "logpkt", false, "Log packets")
 	flag.BoolVar(&restricted, "restrict", false, "If this option is enabled, the guest will be isolated, i.e. it will not be able to contact the host and no guest IP packets will be routed over the host to the outside. This option does not affect any explicitly set forwarding rules.")
+	flag.StringVar(&tftpPath, "tftp", "", "TFTP server root path")
 }
 
 func main() {
@@ -233,6 +235,11 @@ func Main() int {
 	golog.SetOutput(ioutil.Discard)
 	if err = setupDHCP(s, &state); err != nil {
 		fmt.Fprintf(os.Stderr, "[!] Failed to setup DHCP: %s\n", err)
+		return 1
+	}
+
+	if err = setupTFTP(s, &state, tftpPath); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to setup TFTP: %s\n", err)
 		return 1
 	}
 

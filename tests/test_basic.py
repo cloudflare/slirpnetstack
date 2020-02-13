@@ -578,6 +578,23 @@ class LocalForwardingPPTest(base.TestCase):
         self.assertIn("abcd::1", read_log())
         self.assertIn("local-fwd PP done", p.stdout_line())
 
+
+class TFTPTest(base.TestCase):
+    @base.withScapy()
+    def tftp_serve(self, s):
+        get_sc = lambda *args, **kwargs: s
+        r = TFTP_read("data/resolv.conf", "10.0.2.2", ll=get_sc, recvsock=get_sc).run()
+        self.assertIn("8.8.8.8", r.decode())
+
+        with self.assertRaisesRegex(scapy.automaton.Automaton.ErrorState, "File not found"):
+            TFTP_read("a-missing-file", "10.0.2.2", ll=get_sc, recvsock=get_sc).run()
+
+    def test_tftp(self):
+        ''' Test TFTP sever '''
+        testdir = os.path.dirname(__file__)
+        self.tftp_serve(parg='-tftp %s' % testdir)
+
+
 class DHCPTest(base.TestCase):
     @base.withScapy()
     def test_dhcp_v4(self, s):

@@ -8,6 +8,7 @@ require (
 	github.com/golang/protobuf v1.3.3 // indirect
 	github.com/insomniacslk/dhcp v0.0.0-20200210095418-45e5f320b2f0
 	github.com/opencontainers/runtime-spec v0.1.2-0.20171211145439-b2d941ef6a78
+	github.com/pin/tftp v2.1.0+incompatible
 	github.com/sirupsen/logrus v1.4.2
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	golang.org/x/sys v0.0.0-20200202164722-d101bd2416d5
