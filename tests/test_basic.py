@@ -244,6 +244,19 @@ class GenericForwardingTest(base.TestCase):
         port = self.assertListenLine(p, "local-fwd Local listen tcp://127.1.2.3")
         self.assertEqual(port, echo_port)
 
+    def test_local_fwd_resolve_host(self):
+        ''' Test if you can local forward to dns label.'''
+        g_echo_port = self.start_tcp_echo(guest=True)
+        p = self.prun("-L localhost:0:10.0.2.100:%s" % (g_echo_port))
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen")
+
+        with self.guest_netns():
+            self.assertTcpEcho(ip="127.0.0.1", port=g_echo_port)
+        self.assertTcpEcho(ip="127.0.0.1", port=port)
+        self.assertTcpEcho(ip="127.0.0.1", port=port)
+        self.assertIn("local-fwd conn", p.stdout_line())
+
 
 class RemoteForwardingTest(base.TestCase):
     def test_tcp_remote_fwd(self):

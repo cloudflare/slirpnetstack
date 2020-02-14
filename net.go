@@ -52,3 +52,15 @@ func netParseIP(h string) net.IP {
 	}
 	return ip
 }
+
+func netParseOrResolveIP(h string) net.IP {
+	ip := netParseIP(h)
+	if ip != nil {
+		return ip
+	}
+	addrs, err := net.LookupHost(h)
+	if err != nil || len(addrs) < 1 {
+		return nil
+	}
+	return netParseIP(addrs[0])
+}

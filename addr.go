@@ -102,7 +102,7 @@ func (f *FwdAddrSlice) Set(value string) error {
 	}
 
 	if bindIP != "" {
-		ip := netParseIP(bindIP)
+		ip := netParseOrResolveIP(bindIP)
 		if ip == nil {
 			return fmt.Errorf("Unable to parse IP address %q", bindIP)
 		}
@@ -124,7 +124,7 @@ func (f *FwdAddrSlice) Set(value string) error {
 	}
 
 	if hostIP != "" {
-		ip := netParseIP(hostIP)
+		ip := netParseOrResolveIP(hostIP)
 		if ip == nil {
 			return fmt.Errorf("Unable to parse IP address %q", hostIP)
 		}
