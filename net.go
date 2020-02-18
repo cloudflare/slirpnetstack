@@ -62,5 +62,13 @@ func netParseOrResolveIP(h string) net.IP {
 	if err != nil || len(addrs) < 1 {
 		return nil
 	}
+
+	// prefer IPv4. No real reason.
+	for _, addr := range addrs {
+		ip := netParseIP(addr)
+		if ip.To4() != nil {
+			return ip
+		}
+	}
 	return netParseIP(addrs[0])
 }
