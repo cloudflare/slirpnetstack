@@ -67,7 +67,7 @@ func netParseOrResolveIP(h string) net.IP {
 	for _, addr := range addrs {
 		ip := netParseIP(addr)
 		if ip.To4() != nil {
-			return ip
+			return ip.To4()
 		}
 	}
 	return netParseIP(addrs[0])
