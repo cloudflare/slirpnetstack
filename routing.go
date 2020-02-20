@@ -47,7 +47,7 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 		go func() {
 			if rf != nil {
 				RemoteForward(conn, rf)
-			} else {
+			} else if !state.Restricted {
 				RoutingForward(conn, loc)
 			}
 		}()
@@ -90,7 +90,7 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 		go func() {
 			if rf != nil {
 				RemoteForward(conn, rf)
-			} else {
+			} else if !state.Restricted {
 				RoutingForward(conn, loc)
 			}
 		}()

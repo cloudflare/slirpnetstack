@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 import unittest
 
+from scapy.all import StreamSocket, sndrcv, Ether, conf, Route, ARP
+
 LIBC = ctypes.CDLL("libc.so.6")
 SLIRPNETSTACKBIN = os.environ.get('SLIRPNETSTACKBIN')
 DEBUG = bool(os.environ.get('DEBUG'))
@@ -231,6 +233,11 @@ class TestCase(unittest.TestCase):
             s.recv(1024)
         self.assertEqual(e.exception.errno, errno.ECONNREFUSED)
 
+    def assertTcpTimeout(self, ip, port):
+        with self.assertRaises(socket.timeout) as e:
+            s = utils.connect(ip, port, cleanup=self)
+            s.recv(1024)
+
     def assertStartSync(self, p, fd=False):
         if not fd:
             self.assertIn("[.] Join", p.stderr_line())
@@ -241,6 +248,78 @@ class TestCase(unittest.TestCase):
         line = p.stdout_line().strip()
         self.assertIn(in_pattern, line)
         return int(line.split(":")[-1])
+
+
+def withFd():
+    def decorate(fn):
+        fn_name = fn.__name__
+        @functools.wraps(fn)
+        def maybe(*args, **kw):
+            sp = socket.socketpair(type=socket.SOCK_DGRAM)
+            os.set_inheritable(sp[0].fileno(), True)
+            self = args[0]
+            p = self.prun("-fd %d" % sp[0].fileno(), close_fds=False, netns=False)
+            self.assertStartSync(p, fd=True)
+            kw['fd'] = sp[1]
+            ret = fn(*args, **kw)
+            sp[0].close()
+            sp[1].close()
+            return ret
+        return maybe
+    return decorate
+
+
+class testScapySocket(object):
+    def __init__(self, fd):
+        ss = StreamSocket(fd)
+        ss.basecls = Ether
+        self.ss = ss
+        conf.route = Route() # reinitializes the route based on the NS
+        # send a gratious ARP to tell our MAC/IP
+        arp = ARP()
+        self.e = Ether(src=arp.hwsrc, dst='70:71:aa:4b:29:aa')
+        self.send(arp)
+
+    def send(self, x):
+        self.ss.send(self.e / x)
+
+    def recv(self, x):
+        # this is not symmetrical with send, which appends Ether
+        # header, but ss.basecls will strip it of: not sure if that's
+        # the best way of doing things in fact, but that seem to work..
+        return self.ss.recv(x)
+
+    def fileno(self):
+        return self.ss.fileno()
+
+    def sr1(self, x, checkIPaddr=True, *args, **kwargs):
+        conf.checkIPaddr = checkIPaddr
+        ans, _ = sndrcv(self.ss, self.e / x, *args, **kwargs)
+        return ans[0][1]
+
+    def sr(self, x, checkIPaddr=True, *args, **kwargs):
+        conf.checkIPaddr = checkIPaddr
+        return sndrcv(self.ss, self.e / x, *args, **kwargs)
+
+
+def withScapy():
+    def decorate(fn):
+        fn_name = fn.__name__
+        @functools.wraps(fn)
+        def maybe(*args, **kw):
+            sp = socket.socketpair(type=socket.SOCK_DGRAM)
+            os.set_inheritable(sp[0].fileno(), True)
+            self = args[0]
+            arg = kw.pop('parg', '')
+            p = self.prun(arg + " -fd %d" % sp[0].fileno(), close_fds=False, netns=False)
+            self.assertStartSync(p, fd=True)
+            kw['s'] = testScapySocket(sp[1])
+            ret = fn(*args, **kw)
+            sp[0].close()
+            sp[1].close()
+            return ret
+        return maybe
+    return decorate
 
 
 def isolateHostNetwork():

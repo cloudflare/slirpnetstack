@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+	golog "log"
 	"math/rand"
 	"net"
 	"os"
@@ -30,9 +32,21 @@ var (
 	metricAddr     AddrFlags
 	gomaxprocs     int
 	pcapPath       string
+	net4, net6     string
+	dhcpDns        string
+	dhcpBootfile   string
+	dhcpNbp        string
+	tftpPath       string
+	logPkt         bool
+	restricted     bool
 )
 
 func init() {
+	flag.StringVar(&net4, "net", "10.0.2.2/24", "IPv4 CIDR")
+	flag.StringVar(&net6, "net6", "2001:2::2/32", "IPv6 CIDR")
+	flag.StringVar(&dhcpDns, "dhcp-dns", "", "Set DHCP DNS (read from /etc/resolv.conf by default)")
+	flag.StringVar(&dhcpBootfile, "dhcp-bootfile", "", "Set DHCP bootfile")
+	flag.StringVar(&dhcpNbp, "dhcp-nbp", "", "Set DHCP NBP URL (ex: tftp://10.0.0.1/my-nbp)")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -43,6 +57,9 @@ func init() {
 	flag.Var(&metricAddr, "m", "Metrics addr")
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
+	flag.BoolVar(&logPkt, "logpkt", false, "Log packets")
+	flag.BoolVar(&restricted, "restrict", false, "If this option is enabled, the guest will be isolated, i.e. it will not be able to contact the host and no guest IP packets will be routed over the host to the outside. This option does not affect any explicitly set forwarding rules.")
+	flag.StringVar(&tftpPath, "tftp", "", "TFTP server root path")
 }
 
 func main() {
@@ -51,8 +68,17 @@ func main() {
 }
 
 type State struct {
+	Restricted   bool
 	RoutingDeny  []*net.IPNet
 	RoutingAllow []*net.IPNet
+
+	Host, Host6 net.IP
+	Net, Net6   *net.IPNet
+
+	DHCPStart, DHCPEnd net.IP
+	DHCPDns            *dnsConfig
+	DHCPNbp            string
+	DHCPBootfile       string
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
@@ -77,6 +103,29 @@ func Main() int {
 	if flag.Parsed() == false {
 		flag.Parse()
 	}
+
+	state.Restricted = restricted
+
+	if state.Host, state.Net, err = net.ParseCIDR(net4); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to parse -net: %s\n", err)
+		return 1
+	}
+	if state.Host6, state.Net6, err = net.ParseCIDR(net6); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to parse -net6: %s\n", err)
+		return 1
+	}
+
+	state.DHCPStart = append(state.DHCPStart, state.Host.To4()...)
+	state.DHCPStart[3] = 15
+	state.DHCPEnd = append(state.DHCPEnd, state.Host.To4()...)
+	state.DHCPEnd[3] = 100
+	if dhcpDns != "" {
+		state.DHCPDns = &dnsConfig{servers: []string{dhcpDns}}
+	} else {
+		state.DHCPDns = dnsReadConfig("/etc/resolv.conf")
+	}
+	state.DHCPNbp = dhcpNbp
+	state.DHCPBootfile = dhcpBootfile
 
 	if gomaxprocs > 0 {
 		runtime.GOMAXPROCS(gomaxprocs)
@@ -166,17 +215,33 @@ func Main() int {
 		defer pcapFile.Close()
 	}
 
+	if logPkt {
+		log.SetLevel(log.Debug)
+		linkEP = sniffer.New(linkEP)
+	}
 	if err = createNIC(s, 1, linkEP); err != nil {
 		panic(fmt.Sprintf("Failed to createNIC: %s", err))
 
 	}
 
-	StackRoutingSetup(s, 1, "10.0.2.2/24")
+	StackRoutingSetup(s, 1, state.Host, state.Net)
 	StackPrimeArp(s, 1, netParseIP("10.0.2.100"))
 
-	StackRoutingSetup(s, 1, "2001:2::2/32")
+	StackRoutingSetup(s, 1, state.Host6, state.Net6)
 
 	doneChannel := make(chan bool)
+
+	// Silence insomniacslk/dhcp...
+	golog.SetOutput(ioutil.Discard)
+	if err = setupDHCP(s, &state); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to setup DHCP: %s\n", err)
+		return 1
+	}
+
+	if err = setupTFTP(s, &state, tftpPath); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to setup TFTP: %s\n", err)
+		return 1
+	}
 
 	for _, lf := range localFwd {
 		var srv Listener
