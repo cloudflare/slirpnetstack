@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
@@ -158,8 +157,10 @@ func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, bu
 			if IPNetContains(state.RoutingDeny, netAddrIP(ppSrc)) == false {
 				srcIP = ppSrc
 			} else {
-				err = errors.New("PP denied by routingdeny")
-				goto pperror
+				// If the source IP as reported by PP
+				// is not routable, still forward
+				// connection. Just don't use/leak the
+				// original IP.
 			}
 		}
 

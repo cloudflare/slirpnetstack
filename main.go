@@ -94,24 +94,19 @@ func Main() int {
 	state.remoteUdpFwd = make(map[string]*FwdAddr)
 	state.remoteTcpFwd = make(map[string]*FwdAddr)
 	// For the list of reserved IP's see
-	// https://idea.popcount.org/2019-12-06-addressing/
+	// https://idea.popcount.org/2019-12-06-addressing/ The idea
+	// here is to forbid outbound connections to obviously wrong
+	// or meaningless IP's.
 	state.RoutingDeny = append(state.RoutingDeny,
 		MustParseCIDR("0.0.0.0/8"),
-		MustParseCIDR("10.0.0.0/8"),
+		MustParseCIDR("10.0.2.0/24"),
 		MustParseCIDR("127.0.0.0/8"),
-		MustParseCIDR("169.254.0.0/16"),
-		MustParseCIDR("224.0.0.0/4"),
-		MustParseCIDR("240.0.0.0/4"),
 		MustParseCIDR("255.255.255.255/32"),
 		MustParseCIDR("::/128"),
 		MustParseCIDR("::1/128"),
 		MustParseCIDR("::/96"),
 		MustParseCIDR("::ffff:0:0:0/96"),
 		MustParseCIDR("64:ff9b::/96"),
-		MustParseCIDR("fc00::/7"),
-		MustParseCIDR("fe80::/10"),
-		MustParseCIDR("ff00::/8"),
-		MustParseCIDR("fec0::/10"),
 	)
 
 	state.RoutingAllow = append(state.RoutingAllow,
