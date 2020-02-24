@@ -145,12 +145,7 @@ func MustSubnet(ipNet *net.IPNet) *tcpip.Subnet {
 	return &subnet
 }
 
-func StackRoutingSetup(s *stack.Stack, nic tcpip.NICID, assignNet string) {
-	ipAddr, ipNet, err := net.ParseCIDR(assignNet)
-	if err != nil {
-		panic(fmt.Sprintf("Unable to ParseCIDR(%s): %s", assignNet, err))
-	}
-
+func StackRoutingSetup(s *stack.Stack, nic tcpip.NICID, ipAddr net.IP, ipNet *net.IPNet) {
 	if ipAddr.To4() != nil {
 		s.AddAddress(nic, ipv4.ProtocolNumber, tcpip.Address(ipAddr.To4()))
 	} else {

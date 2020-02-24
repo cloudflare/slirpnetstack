@@ -1,6 +1,6 @@
 export GOPRIVATE := code.cfops.it
 IMPORT_PATH := github.com/majek/slirpnetstack
-GOFLAGS=-ldflags=-compressdwarf=false
+GOFLAGS=-ldflags=-compressdwarf=false -gcflags=all="-N -l"
 
 bin/slirpnetstack: *.go go.mod
 	go build \

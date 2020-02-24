@@ -1,11 +1,13 @@
 from . import base
 from . import utils
+from ipaddress import IPv4Address
 import os
 import socket
 import struct
 import unittest
 import urllib.request
 
+from scapy.all import *
 
 class BasicTest(base.TestCase):
     def test_help(self):
@@ -15,6 +17,24 @@ class BasicTest(base.TestCase):
         self.assertFalse(o)
         e = p.stderr_line()
         self.assertIn("Usage of ", e)
+
+    def test_net(self):
+        ''' Basic test if -net parses succesfully. '''
+        p = self.prun("-net 12.12.0.1/23")
+        self.assertStartSync(p)
+        p.close()
+        p = self.prun("-net 12.12.foo/23")
+        self.assertIn("invalid CIDR", p.stderr_line())
+        p = self.prun("-net 12.12.32.23")
+        self.assertIn("invalid CIDR", p.stderr_line())
+
+        p = self.prun("-net6 2002:1::2/32")
+        self.assertStartSync(p)
+        p.close()
+        p = self.prun("-net6 2002:1::foo/32")
+        self.assertIn("invalid CIDR", p.stderr_line())
+        p = self.prun("-net6 2002:1::2")
+        self.assertIn("invalid CIDR", p.stderr_line())
 
     def test_basic_ping(self):
         ''' Due to how netstack is configured, we will answer to ping against
@@ -27,6 +47,11 @@ class BasicTest(base.TestCase):
             self.assertEqual(r, 0)
             r = os.system("ping -q 1.1.1.1 -c 1 -n > /dev/null")
             self.assertEqual(r, 0)
+
+    def test_logpkt(self):
+        ''' Check -logpkt '''
+        p = self.prun("-logpkt")
+        self.assertStartSync(p)
 
     def test_pcap(self):
         ''' Check -pcap capture '''
@@ -46,12 +71,9 @@ class BasicTest(base.TestCase):
             # sometimes see some other packet at 76 bytes (arp?)
             self.assertIn(captured_length, (28,76))
 
-    def test_fd(self):
+    @base.withFd()
+    def test_fd(self, fd):
         ''' Check inherinting tuntap fd with -fd option '''
-        sp = socket.socketpair(type=socket.SOCK_DGRAM)
-        os.set_inheritable(sp[0].fileno(), True)
-        p = self.prun("-fd %d" % sp[0].fileno(), close_fds=False, netns=False)
-        self.assertStartSync(p, fd=True)
         # 10.0.2.15->10.0.2.2 ICMP Echo (ping) request
         ping = bytes.fromhex('''
         52 55 0a 00 02 02 70 71 aa 4b 29 aa 08 00 45 00
@@ -61,13 +83,32 @@ class BasicTest(base.TestCase):
         16 17 18 19 1a 1b 1c 1d 1e 1f 20 21 22 23 24 25
         26 27 28 29 2a 2b 2c 2d 2e 2f 30 31 32 33 34 35
         36 37'''.replace('\n','').replace(' ', ''))
-        sp[1].sendall(ping)
+        fd.sendall(ping)
         while True:
-            pong = sp[1].recv(1024)
+            pong = fd.recv(1024)
             if pong[14+9] == 1 and pong[14+20] == 0: #ICMP and echo reply
                 break
-        sp[0].close()
-        sp[1].close()
+
+    @base.withScapy()
+    def test_ping(self, s):
+        ''' Test Scapy ping '''
+        pkt = s.sr1(IP(dst="10.0.2.2")/ICMP())
+        self.assertEqual(pkt[ICMP].type, 0)
+
+    @base.withScapy()
+    def _scapy_echo(self, s):
+        from scapy.layers import http
+        get_sc = lambda *args, **kwargs: s
+        l = TCP_client.tcplink(http.HTTP, "192.0.2.5", 80, ll=get_sc, recvsock=get_sc)
+        l.send(http.HTTPRequest())
+        req = l.recv()
+        self.assertIn('GET', req.summary())
+        l.close()
+
+    def test_scapy_echo(self):
+        ''' Test a fancy HTTP request echo with Scapy '''
+        echo_port = self.start_tcp_echo()
+        self._scapy_echo(parg="-R 192.0.2.5:80:127.0.0.1:%s" % echo_port)
 
     def test_basic_connection(self):
         ''' Test connection reset on netstack IP. Netstack is not supposed to
@@ -125,6 +166,16 @@ class BasicTest(base.TestCase):
         metrics_port = int(e.rsplit(':')[-1].rstrip())
         f = urllib.request.urlopen('http://127.0.0.1:%d/debug/pprof' % (metrics_port,))
         self.assertIn(b"Types of profiles available:", f.read(300))
+
+
+    @base.isolateHostNetwork()
+    def test_restrict(self):
+        ''' Test -restrict '''
+        echo_port = self.start_tcp_echo()
+        p = self.prun("-restrict")
+        self.assertStartSync(p)
+        with self.guest_netns():
+            self.assertTcpTimeout(ip="192.168.1.100", port=echo_port)
 
 
 class RoutingTest(base.TestCase):
@@ -539,3 +590,92 @@ class LocalForwardingPPTest(base.TestCase):
         s.close()
         self.assertIn("abcd::1", read_log())
         self.assertIn("local-fwd PP done", p.stdout_line())
+
+class DHCPTest(base.TestCase):
+    @base.withScapy()
+    def test_dhcp_v4(self, s):
+        ''' Test DHCPv4 discover '''
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+         # BOOTREPLY
+        self.assertEqual(pkt[BOOTP].op, 2)
+        addr = IPv4Address(pkt[BOOTP].yiaddr)
+        self.assertGreaterEqual(addr, IPv4Address('10.0.2.15'))
+        self.assertLess(addr, IPv4Address('10.0.2.100'))
+        for o in pkt[DHCP].options:
+            if o[0] in ('router', 'server_id'):
+                self.assertEqual(o[1], '10.0.2.2')
+        opts = [o[0] for o in pkt[DHCP].options if isinstance(o, tuple)]
+        self.assertIn('router', opts)
+        self.assertIn('name_server', opts)
+        self.assertIn('lease_time', opts)
+        self.assertIn('server_id', opts)
+
+    @base.withScapy()
+    def dhcp_and_net(self, s):
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+         # BOOTREPLY
+        self.assertEqual(pkt[BOOTP].op, 2)
+        addr = IPv4Address(pkt[BOOTP].yiaddr)
+        self.assertGreaterEqual(addr, IPv4Address('12.34.56.15'))
+        self.assertLess(addr, IPv4Address('12.34.56.100'))
+
+    def test_dhcp_and_net(self):
+        ''' Test DHCPv4 and -net '''
+        self.dhcp_and_net(parg='-net 12.34.56.1/16')
+
+    @base.withScapy()
+    def dhcp_dns(self, s):
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+         # BOOTREPLY
+        for o in pkt[DHCP].options:
+            if o[0] == 'name_server':
+                self.assertEqual(o[1], '8.8.8.8')
+                return
+        self.fail()
+
+    def test_dhcp_dns(self):
+        ''' Test DHCPv4 DNS option '''
+        self.dhcp_dns(parg='-dhcp-dns 8.8.8.8')
+
+    @base.withScapy()
+    def dhcp_nbp(self, s):
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+        # BOOTREPLY
+        bootFileName=None
+        tftpServerName=None
+        for o in pkt[DHCP].options:
+            if o[0] == 'boot-file-name':
+                bootFileName = o[1].decode()
+            elif o[0] in (66, 'tftp-server-name'): # FIXME: scapy doesn't know that field?
+                tftpServerName = o[1].decode()
+        self.assertEqual(bootFileName, '/my-nbp')
+        self.assertEqual(tftpServerName, '10.0.0.1')
+
+    def test_dhcp_nbp(self):
+        ''' Test DHCPv4 NBP option '''
+        self.dhcp_nbp(parg='-dhcp-nbp tftp://10.0.0.1/my-nbp')
+
+    @base.withScapy()
+    def dhcp_bootfile(self, s):
+        bootp = BOOTP(xid=RandInt())
+        dhcp = DHCP(options=[("message-type","discover"),"end"])
+        p = IP(src='0.0.0.0', dst='255.255.255.255')/UDP(sport=68,dport=67)/bootp/dhcp
+        pkt = s.sr1(p, checkIPaddr=False)
+        # BOOTREPLY
+        self.assertEqual(pkt[BOOTP].file.decode().rstrip('\0'), 'http://boot.netboot.xyz/')
+
+    def test_dhcp_bootfile(self):
+        ''' Test DHCPv4 bootfile option '''
+        self.dhcp_bootfile(parg='-dhcp-bootfile http://boot.netboot.xyz/')
