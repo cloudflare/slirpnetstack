@@ -11,6 +11,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/opencontainers/runc/libcontainer/system"
+	"golang.org/x/sys/unix"
+
 	"gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -30,6 +33,7 @@ var (
 	metricAddr     AddrFlags
 	gomaxprocs     int
 	pcapPath       string
+	exitWithParent bool
 )
 
 func init() {
@@ -43,6 +47,7 @@ func init() {
 	flag.Var(&metricAddr, "m", "Metrics addr")
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
+	flag.BoolVar(&exitWithParent, "exit-with-parent", false, "Exit with parent process")
 }
 
 func main() {
@@ -76,6 +81,10 @@ func Main() int {
 	// duplicated items in list, ensure parsing is done only once.
 	if flag.Parsed() == false {
 		flag.Parse()
+	}
+
+	if exitWithParent {
+		system.ParentDeathSignal(unix.SIGTERM).Set()
 	}
 
 	if gomaxprocs > 0 {
