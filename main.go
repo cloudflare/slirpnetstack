@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -65,9 +66,83 @@ type State struct {
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
+	localUdpFwd  map[string]*FwdAddr
+	localTcpFwd  map[string]*FwdAddr
 
 	dbus   *dbus.Conn
 	quitCh chan bool
+}
+
+func (s *State) addLocalFwd(lf *FwdAddr) error {
+	srv, err := func() (Listener, error) {
+		switch lf.network {
+		case "tcp":
+			return LocalForwardTCP(s, s.stack, lf)
+		case "udp":
+			return LocalForwardUDP(s, s.stack, lf)
+		}
+		return nil, errors.New("Unhandled protocol")
+	}()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to listen on %s://%s:%d: %s\n",
+			lf.network, lf.bind.Addr, lf.bind.Port, err)
+		return err
+	}
+
+	ppPrefix := ""
+	if lf.proxyProtocol {
+		ppPrefix = "PP "
+	}
+	laddr := srv.Addr()
+	fmt.Printf("[+] local-fwd Local %slisten %s://%s\n",
+		ppPrefix, laddr.Network(), laddr.String())
+	return nil
+}
+
+func (s *State) removeLocalFwd(lf *FwdAddr) error {
+	switch lf.network {
+	case "tcp":
+		f := s.localTcpFwd[lf.HostAddr().String()]
+		f.listener.Close()
+		delete(s.localTcpFwd, lf.HostAddr().String())
+		return nil
+	case "udp":
+		f := s.localUdpFwd[lf.HostAddr().String()]
+		f.listener.Close()
+		delete(s.localUdpFwd, lf.HostAddr().String())
+		return nil
+	}
+
+	return errors.New("Unhandled protocol")
+}
+
+func (s *State) addRemoteFwd(rf *FwdAddr) error {
+	fmt.Printf("[+] Accepting on remote side %s://%s:%d\n",
+		rf.network, rf.bind.Addr.String(), rf.bind.Port)
+
+	switch rf.network {
+	case "tcp":
+		s.remoteTcpFwd[rf.BindAddr().String()] = rf
+		return nil
+	case "udp":
+		s.remoteUdpFwd[rf.BindAddr().String()] = rf
+		return nil
+	}
+
+	return errors.New("Unhandled protocol")
+}
+
+func (s *State) removeRemoteFwd(rf *FwdAddr) error {
+	switch rf.network {
+	case "tcp":
+		delete(s.remoteTcpFwd, rf.BindAddr().String())
+		return nil
+	case "udp":
+		delete(s.remoteUdpFwd, rf.BindAddr().String())
+		return nil
+	}
+
+	return errors.New("Unhandled protocol")
 }
 
 func Main() int {
@@ -110,6 +185,8 @@ func Main() int {
 	state.quitCh = make(chan bool)
 	state.remoteUdpFwd = make(map[string]*FwdAddr)
 	state.remoteTcpFwd = make(map[string]*FwdAddr)
+	state.localUdpFwd = make(map[string]*FwdAddr)
+	state.localTcpFwd = make(map[string]*FwdAddr)
 	// For the list of reserved IP's see
 	// https://idea.popcount.org/2019-12-06-addressing/ The idea
 	// here is to forbid outbound connections to obviously wrong
@@ -194,39 +271,12 @@ func Main() int {
 		return 1
 	}
 
-	for _, lf := range localFwd {
-		var srv Listener
-		switch lf.network {
-		case "tcp":
-			srv, err = LocalForwardTCP(&state, s, &lf)
-		case "udp":
-			srv, err = LocalForwardUDP(&state, s, &lf)
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[!] Failed to listen on %s://%s:%d: %s\n",
-				lf.network, lf.bind.Addr, lf.bind.Port, err)
-		} else {
-			ppPrefix := ""
-			if lf.proxyProtocol {
-				ppPrefix = "PP "
-			}
-			laddr := srv.Addr()
-			fmt.Printf("[+] local-fwd Local %slisten %s://%s\n",
-				ppPrefix,
-				laddr.Network(),
-				laddr.String())
-		}
+	for i, _ := range localFwd {
+		state.addLocalFwd(&localFwd[i])
 	}
 
-	for i, rf := range remoteFwd {
-		fmt.Printf("[+] Accepting on remote side %s://%s:%d\n",
-			rf.network, rf.bind.Addr.String(), rf.bind.Port)
-		switch rf.network {
-		case "tcp":
-			state.remoteTcpFwd[rf.BindAddr().String()] = &remoteFwd[i]
-		case "udp":
-			state.remoteUdpFwd[rf.BindAddr().String()] = &remoteFwd[i]
-		}
+	for i, _ := range remoteFwd {
+		state.addRemoteFwd(&remoteFwd[i])
 	}
 
 	tcpHandler := TcpRoutingHandler(&state)

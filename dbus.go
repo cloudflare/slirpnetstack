@@ -60,6 +60,104 @@ func (s *State) GetInfo() (string, *dbus.Error) {
 	return b.String(), nil
 }
 
+type forwardEntry struct {
+	Network  string
+	Addr     string
+	Port     uint16
+	HostAddr string
+	HostPort uint16
+}
+
+func (s *State) RemoveRemoteForward(addr string) *dbus.Error {
+	var fwa FwdAddr
+
+	if err := fwa.Set(addr); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+
+	fwa.SetDefaultAddr(netParseIP("10.0.2.2"), netParseIP("127.0.0.1"))
+
+	if err := s.removeRemoteFwd(&fwa); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+
+	return nil
+}
+
+func (s *State) AddRemoteForward(addr string) *dbus.Error {
+	var fwa FwdAddr
+
+	if err := fwa.Set(addr); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+
+	fwa.SetDefaultAddr(netParseIP("10.0.2.2"), netParseIP("127.0.0.1"))
+
+	err := s.addRemoteFwd(&fwa)
+	if err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
+func (s *State) RemoveLocalForward(addr string) *dbus.Error {
+	var fwa FwdAddr
+
+	if err := fwa.Set(addr); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+
+	fwa.SetDefaultAddr(netParseIP("127.0.0.1"), netParseIP("10.0.2.100"))
+
+	if err := s.removeLocalFwd(&fwa); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+
+	return nil
+}
+
+func (s *State) AddLocalForward(addr string) *dbus.Error {
+	var fwa FwdAddr
+
+	if err := fwa.Set(addr); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+
+	fwa.SetDefaultAddr(netParseIP("127.0.0.1"), netParseIP("10.0.2.100"))
+
+	err := s.addLocalFwd(&fwa)
+	if err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
+func getForwardList(m map[string]*FwdAddr) []forwardEntry {
+	e := []forwardEntry{}
+	for _, b := range m {
+		e = append(e, forwardEntry{
+			b.network,
+			b.bind.Addr.String(),
+			b.bind.Port,
+			b.host.Addr.String(),
+			b.host.Port,
+		})
+	}
+	return e
+}
+
+func (s *State) ListRemoteForward() ([]forwardEntry, *dbus.Error) {
+	e := getForwardList(s.remoteTcpFwd)
+	e = append(e, getForwardList(s.remoteUdpFwd)...)
+	return e, nil
+}
+
+func (s *State) ListLocalForward() ([]forwardEntry, *dbus.Error) {
+	e := getForwardList(s.localTcpFwd)
+	e = append(e, getForwardList(s.localUdpFwd)...)
+	return e, nil
+}
+
 func (s *State) Quit() *dbus.Error {
 	s.quitCh <- true
 	return nil

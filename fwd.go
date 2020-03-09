@@ -28,14 +28,16 @@ func LocalForwardTCP(state *State, s *stack.Stack, rf *FwdAddr) (Listener, error
 		return nil, err
 	}
 
-	go func() error {
+	go func() {
 		for {
 			nRemote, err := srv.Accept()
 			if err != nil {
-				// Not sure when Accept() can error,
-				// nor what the correct resolution
-				// is. Most likely socket is closed.
-				return err
+				// Most likely socket is closed.
+				// Not sure when Accept() can error otherwise,
+				if logConnections {
+					fmt.Printf("[!] TCP local-fwd error: %s\n", err)
+				}
+				return
 			}
 			remote := &KaTCPConn{nRemote.(*net.TCPConn)}
 
@@ -45,6 +47,10 @@ func LocalForwardTCP(state *State, s *stack.Stack, rf *FwdAddr) (Listener, error
 		}
 	}()
 
+	sa := srv.Addr().(*net.TCPAddr)
+	rf.bind.Port = uint16(sa.Port)
+	rf.listener = srv
+	state.localTcpFwd[rf.HostAddr().String()] = rf
 	return srv, nil
 }
 
@@ -102,7 +108,11 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf *FwdAddr) (Listener, error
 			}()
 		}
 	}()
-	return &UDPListner{srv}, nil
+
+	rf.listener = &UDPListner{srv}
+	state.localUdpFwd[rf.HostAddr().String()] = rf
+
+	return rf.listener, nil
 }
 
 func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, buf []byte, proxyProtocol bool) {

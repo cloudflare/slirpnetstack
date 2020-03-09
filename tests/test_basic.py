@@ -441,6 +441,34 @@ class LocalForwardingTest(base.TestCase):
         self.assertEqual(b"kota", s.recv(1024))
         s.close()
 
+    def test_fwd_dbus(self):
+        ''' Test forwarding dbus API '''
+        if not base.DBUS_SESSION_BUS_ADDRESS:
+            self.skipTest("DBUS_SESSION_BUS_ADDRESS unset")
+
+        g_echo_port = self.start_tcp_echo(guest=True)
+        p = self.prun("-dbus-address %s" % base.DBUS_SESSION_BUS_ADDRESS)
+        self.assertStartSync(p)
+        bus = SessionBus()
+        iface = bus.get(".Slirp1_%u" % p.p.pid, "/org/freedesktop/SlirpHelper1")
+
+        l = iface.ListLocalForward()
+        self.assertEqual(l, [])
+
+        iface.AddLocalForward("0:10.0.2.100:%s" % g_echo_port)
+        port = self.assertListenLine(p, "local-fwd Local listen")
+        with self.guest_netns():
+            self.assertTcpEcho(ip="127.0.0.1", port=g_echo_port)
+        self.assertTcpEcho(ip="127.0.0.1", port=port)
+        self.assertTcpEcho(ip="127.0.0.1", port=port)
+        self.assertIn("local-fwd conn", p.stdout_line())
+        l = iface.ListLocalForward()
+        self.assertEqual(l, [('tcp', '127.0.0.1', port, '10.0.2.100', g_echo_port)])
+
+        iface.RemoveLocalForward("0:10.0.2.100:%s" % g_echo_port)
+        l = iface.ListLocalForward()
+        self.assertEqual(l, [])
+
 
 class LocalForwardingPPTest(base.TestCase):
     def test_tcp_pp_local_fwd(self):
