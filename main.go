@@ -180,15 +180,13 @@ func Main() int {
 
 	StackRoutingSetup(s, 1, "2001:2::2/32")
 
-	doneChannel := make(chan bool)
-
 	for _, lf := range localFwd {
 		var srv Listener
 		switch lf.network {
 		case "tcp":
-			srv, err = LocalForwardTCP(&state, s, &lf, doneChannel)
+			srv, err = LocalForwardTCP(&state, s, &lf)
 		case "udp":
-			srv, err = LocalForwardUDP(&state, s, &lf, doneChannel)
+			srv, err = LocalForwardUDP(&state, s, &lf)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[!] Failed to listen on %s://%s:%d: %s\n",
