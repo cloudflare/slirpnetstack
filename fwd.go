@@ -87,15 +87,16 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf *FwdAddr, doneChannel <-ch
 
 			// Warning, this is racy, what if two packets are in the queue?
 			remote, err := MagicDialUDP(laddr, raddr)
-			if rf.kaEnable && rf.kaInterval == 0 {
-				remote.closeOnWrite = true
-			}
-
 			if err != nil {
 				// This actually can totally happen in
 				// the said race. Just drop the packet then.
 				continue
 			}
+
+			if rf.kaEnable && rf.kaInterval == 0 {
+				remote.closeOnWrite = true
+			}
+
 
 			go func() {
 				LocalForward(state, s, remote, host, buf[:n], rf.proxyProtocol)
@@ -199,10 +200,6 @@ func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, bu
 
 		guest, err := GonetDial(s, srcIP, gaddr)
 
-		if buf != nil {
-			guest.Write(buf)
-		}
-
 		var pe ProxyError
 		if err != nil {
 			SetResetOnClose(local)
@@ -210,6 +207,7 @@ func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, bu
 			pe.LocalRead = fmt.Errorf("%s", err)
 			pe.First = 0
 		} else {
+			guest.Write(buf)
 			pe = connSplice(local, guest, sppHeader)
 		}
 		if logConnections {
