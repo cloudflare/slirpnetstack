@@ -33,6 +33,7 @@ type FwdAddr struct {
 	kaEnable      bool
 	kaInterval    time.Duration
 	proxyProtocol bool
+	listener      Listener
 }
 
 type FwdAddrSlice []FwdAddr
@@ -49,7 +50,7 @@ func (f *FwdAddrSlice) String() string {
 	return strings.Join(s, " ")
 }
 
-func (f *FwdAddrSlice) Set(value string) error {
+func (fwa *FwdAddr) Set(value string) error {
 	var (
 		bindPort, bindIP string
 		network          string
@@ -67,7 +68,6 @@ func (f *FwdAddrSlice) Set(value string) error {
 		rest = p[0]
 	}
 
-	var fwa FwdAddr
 	switch network {
 	case "udprpc":
 		fwa.network = "udp"
@@ -141,19 +141,32 @@ func (f *FwdAddrSlice) Set(value string) error {
 		fwa.host.Port = uint16(port)
 	}
 
+	return nil
+}
+
+func (f *FwdAddrSlice) Set(value string) error {
+	var fwa FwdAddr
+
+	if err := fwa.Set(value); err != nil {
+		return err
+	}
+
 	*f = append(*f, fwa)
 	return nil
 }
 
+func (fa *FwdAddr) SetDefaultAddr(bindAddrDef net.IP, hostAddrDef net.IP) {
+	if fa.bind.Addr == "" {
+		fa.bind.Addr = tcpip.Address(bindAddrDef)
+	}
+	if fa.host.Addr == "" {
+		fa.host.Addr = tcpip.Address(hostAddrDef)
+	}
+}
+
 func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, hostAddrDef net.IP) {
 	for i, _ := range *f {
-		fa := &(*f)[i]
-		if fa.bind.Addr == "" {
-			fa.bind.Addr = tcpip.Address(bindAddrDef)
-		}
-		if fa.host.Addr == "" {
-			fa.host.Addr = tcpip.Address(hostAddrDef)
-		}
+		(*f)[i].SetDefaultAddr(bindAddrDef, hostAddrDef)
 	}
 }
 

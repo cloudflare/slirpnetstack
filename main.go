@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -14,6 +15,7 @@ import (
 	"github.com/opencontainers/runc/libcontainer/system"
 	"golang.org/x/sys/unix"
 
+	"github.com/godbus/dbus/v5"
 	"gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -34,6 +36,7 @@ var (
 	gomaxprocs     int
 	pcapPath       string
 	exitWithParent bool
+	dbusAddress    string
 )
 
 func init() {
@@ -48,6 +51,7 @@ func init() {
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
 	flag.BoolVar(&exitWithParent, "exit-with-parent", false, "Exit with parent process")
+	flag.StringVar(&dbusAddress, "dbus-address", "", "DBus bus to connect to")
 }
 
 func main() {
@@ -56,11 +60,89 @@ func main() {
 }
 
 type State struct {
+	stack        *stack.Stack
 	RoutingDeny  []*net.IPNet
 	RoutingAllow []*net.IPNet
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
+	localUdpFwd  map[string]*FwdAddr
+	localTcpFwd  map[string]*FwdAddr
+
+	dbus   *dbus.Conn
+	quitCh chan bool
+}
+
+func (s *State) addLocalFwd(lf *FwdAddr) error {
+	srv, err := func() (Listener, error) {
+		switch lf.network {
+		case "tcp":
+			return LocalForwardTCP(s, s.stack, lf)
+		case "udp":
+			return LocalForwardUDP(s, s.stack, lf)
+		}
+		return nil, errors.New("Unhandled protocol")
+	}()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to listen on %s://%s:%d: %s\n",
+			lf.network, lf.bind.Addr, lf.bind.Port, err)
+		return err
+	}
+
+	ppPrefix := ""
+	if lf.proxyProtocol {
+		ppPrefix = "PP "
+	}
+	laddr := srv.Addr()
+	fmt.Printf("[+] local-fwd Local %slisten %s://%s\n",
+		ppPrefix, laddr.Network(), laddr.String())
+	return nil
+}
+
+func (s *State) removeLocalFwd(lf *FwdAddr) error {
+	switch lf.network {
+	case "tcp":
+		f := s.localTcpFwd[lf.HostAddr().String()]
+		f.listener.Close()
+		delete(s.localTcpFwd, lf.HostAddr().String())
+		return nil
+	case "udp":
+		f := s.localUdpFwd[lf.HostAddr().String()]
+		f.listener.Close()
+		delete(s.localUdpFwd, lf.HostAddr().String())
+		return nil
+	}
+
+	return errors.New("Unhandled protocol")
+}
+
+func (s *State) addRemoteFwd(rf *FwdAddr) error {
+	fmt.Printf("[+] Accepting on remote side %s://%s:%d\n",
+		rf.network, rf.bind.Addr.String(), rf.bind.Port)
+
+	switch rf.network {
+	case "tcp":
+		s.remoteTcpFwd[rf.BindAddr().String()] = rf
+		return nil
+	case "udp":
+		s.remoteUdpFwd[rf.BindAddr().String()] = rf
+		return nil
+	}
+
+	return errors.New("Unhandled protocol")
+}
+
+func (s *State) removeRemoteFwd(rf *FwdAddr) error {
+	switch rf.network {
+	case "tcp":
+		delete(s.remoteTcpFwd, rf.BindAddr().String())
+		return nil
+	case "udp":
+		delete(s.remoteUdpFwd, rf.BindAddr().String())
+		return nil
+	}
+
+	return errors.New("Unhandled protocol")
 }
 
 func Main() int {
@@ -100,8 +182,11 @@ func Main() int {
 		netParseIP("10.0.2.2"),
 		netParseIP("127.0.0.1"))
 
+	state.quitCh = make(chan bool)
 	state.remoteUdpFwd = make(map[string]*FwdAddr)
 	state.remoteTcpFwd = make(map[string]*FwdAddr)
+	state.localUdpFwd = make(map[string]*FwdAddr)
+	state.localTcpFwd = make(map[string]*FwdAddr)
 	// For the list of reserved IP's see
 	// https://idea.popcount.org/2019-12-06-addressing/ The idea
 	// here is to forbid outbound connections to obviously wrong
@@ -154,6 +239,7 @@ func Main() int {
 	bufSize := 4 * 1024 * 1024
 
 	s := NewStack(bufSize, bufSize)
+	state.stack = s
 
 	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu)); err != nil {
 		panic(fmt.Sprintf("Failed to create linkEP: %s", err))
@@ -180,41 +266,17 @@ func Main() int {
 
 	StackRoutingSetup(s, 1, "2001:2::2/32")
 
-	doneChannel := make(chan bool)
-
-	for _, lf := range localFwd {
-		var srv Listener
-		switch lf.network {
-		case "tcp":
-			srv, err = LocalForwardTCP(&state, s, &lf, doneChannel)
-		case "udp":
-			srv, err = LocalForwardUDP(&state, s, &lf, doneChannel)
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[!] Failed to listen on %s://%s:%d: %s\n",
-				lf.network, lf.bind.Addr, lf.bind.Port, err)
-		} else {
-			ppPrefix := ""
-			if lf.proxyProtocol {
-				ppPrefix = "PP "
-			}
-			laddr := srv.Addr()
-			fmt.Printf("[+] local-fwd Local %slisten %s://%s\n",
-				ppPrefix,
-				laddr.Network(),
-				laddr.String())
-		}
+	if err = setupDBus(&state, dbusAddress); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to setup DBus: %s\n", err)
+		return 1
 	}
 
-	for i, rf := range remoteFwd {
-		fmt.Printf("[+] Accepting on remote side %s://%s:%d\n",
-			rf.network, rf.bind.Addr.String(), rf.bind.Port)
-		switch rf.network {
-		case "tcp":
-			state.remoteTcpFwd[rf.BindAddr().String()] = &remoteFwd[i]
-		case "udp":
-			state.remoteUdpFwd[rf.BindAddr().String()] = &remoteFwd[i]
-		}
+	for i, _ := range localFwd {
+		state.addLocalFwd(&localFwd[i])
+	}
+
+	for i, _ := range remoteFwd {
+		state.addRemoteFwd(&remoteFwd[i])
 	}
 
 	tcpHandler := TcpRoutingHandler(&state)
@@ -234,13 +296,15 @@ func Main() int {
 
 	for {
 		select {
+		case <-state.quitCh:
+			goto stop
 		case sig := <-sigCh:
 			signal.Reset(sig)
-			fmt.Fprintf(os.Stderr, "[-] Closing\n")
 			goto stop
 		}
 	}
 stop:
+	fmt.Fprintf(os.Stderr, "[-] Closing\n")
 	// TODO: define semantics of graceful close on signal
 	//s.Wait()
 	if metrics != nil {

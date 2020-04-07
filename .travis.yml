@@ -1,7 +1,9 @@
 language: go
+dist: bionic
 go:
 - 1.13.x
 before_install:
+- sudo apt-get -y install python3-pydbus
 - go get -u github.com/mattn/goveralls
 - go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 script:

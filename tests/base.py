@@ -21,6 +21,7 @@ ORIGINAL_NET_NS = open("/proc/self/ns/net", 'rb')
 MOCKHTTPSERVER  = os.environ.get('MOCKHTTPSERVER', './tests/mockhttpserver/mockhttpserver')
 MOCKUDPECHO  = os.environ.get('MOCKUDPECHO', './bin/mockudpecho')
 MOCKTCPECHO  = os.environ.get('MOCKTCPECHO', './bin/mocktcpecho')
+DBUS_SESSION_BUS_ADDRESS = os.environ.get('DBUS_SESSION_BUS_ADDRESS')
 IP_FREEBIND = 15
 
 execno = 0
