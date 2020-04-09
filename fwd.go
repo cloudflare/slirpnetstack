@@ -97,7 +97,6 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf *FwdAddr, doneChannel <-ch
 				remote.closeOnWrite = true
 			}
 
-
 			go func() {
 				LocalForward(state, s, remote, host, buf[:n], rf.proxyProtocol)
 			}()

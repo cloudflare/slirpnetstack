@@ -229,14 +229,14 @@ func Main() int {
 
 	// [****] Finally, the mighty event loop, waiting on signals
 	pid := syscall.Getpid()
-	fmt.Fprintf(os.Stderr, "[+] #%d Started\n", pid)
+	fmt.Fprintf(os.Stderr, "[+] #%d Slirpnetstack started\n", pid)
 	syscall.Kill(syscall.Getppid(), syscall.SIGWINCH)
 
 	for {
 		select {
 		case sig := <-sigCh:
 			signal.Reset(sig)
-			fmt.Fprintf(os.Stderr, "[-] Closing\n")
+			fmt.Fprintf(os.Stderr, "[-] #%d Slirpnetstack closing\n", pid)
 			goto stop
 		}
 	}

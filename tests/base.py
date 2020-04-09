@@ -235,7 +235,7 @@ class TestCase(unittest.TestCase):
         if not fd:
             self.assertIn("[.] Join", p.stderr_line())
             self.assertIn("[.] Opening tun", p.stderr_line())
-        self.assertIn("Started", p.stderr_line())
+        self.assertIn("Slirpnetstack started", p.stderr_line())
 
     def assertListenLine(self, p, in_pattern):
         line = p.stdout_line().strip()
