@@ -588,3 +588,40 @@ class RoutingTestSecurity(base.TestCase):
 
         self.assertUdpEcho(ip="127.0.0.1", src='127.1.2.4', port=echo_udp_port)
         self.assertIn("127.1.2.4", udp_log())
+
+    @base.isolateHostNetwork()
+    def test_source_ipv4(self):
+        ''' Test --source-ipv4 option'''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+        p = self.prun("--source-ipv4=127.4.3.2")
+        self.assertStartSync(p)
+        with self.guest_netns():
+            self.assertTcpEcho(ip="192.168.1.100", port=echo_tcp_port)
+            self.assertIn("Routing conn new", p.stdout_line())
+            self.assertIn("Routing conn done: l=", p.stdout_line())
+            self.assertIn("127.4.3.2", tcp_log())
+
+            self.assertUdpEcho(ip="192.168.1.100", port=echo_udp_port)
+            self.assertIn("Routing conn new", p.stdout_line())
+            self.assertIn("127.4.3.2", udp_log())
+
+    @base.isolateHostNetwork()
+    def test_source_ipv6(self):
+        ''' Test --source-ipv6 option'''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+        p = self.prun("--source-ipv6=::1")
+        self.assertStartSync(p)
+        with self.guest_netns():
+            self.assertTcpEcho(ip="3ffe::100", port=echo_tcp_port)
+            self.assertIn("Routing conn new", p.stdout_line())
+            self.assertIn("Routing conn done: l=", p.stdout_line())
+            self.assertIn("::1", tcp_log())
+
+            try:
+                self.assertUdpEcho(ip="3ffe::100", port=echo_udp_port)
+            except:
+                pass
+            self.assertIn("Routing conn new", p.stdout_line())
+            self.assertIn("::1", udp_log())

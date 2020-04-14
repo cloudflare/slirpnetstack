@@ -72,3 +72,30 @@ func netParseOrResolveIP(h string) net.IP {
 	}
 	return netParseIP(addrs[0])
 }
+
+func OutboundDial(srcIPs *SrcIPs, dst net.Addr) (net.Conn, error) {
+	network := dst.Network()
+	if network == "tcp" {
+		dstTcp := dst.(*net.TCPAddr)
+		var srcTcp *net.TCPAddr
+		if srcIPs != nil && dstTcp.IP.To4() != nil && srcIPs.srcIPv4 != nil {
+			srcTcp = &net.TCPAddr{IP: srcIPs.srcIPv4}
+		}
+		if srcIPs != nil && dstTcp.IP.To4() == nil && srcIPs.srcIPv6 != nil {
+			srcTcp = &net.TCPAddr{IP: srcIPs.srcIPv6}
+		}
+		return net.DialTCP(network, srcTcp, dstTcp)
+	}
+	if network == "udp" {
+		dstUdp := dst.(*net.UDPAddr)
+		var srcUdp *net.UDPAddr
+		if srcIPs != nil && dstUdp.IP.To4() != nil && srcIPs.srcIPv4 != nil {
+			srcUdp = &net.UDPAddr{IP: srcIPs.srcIPv4}
+		}
+		if srcIPs != nil && dstUdp.IP.To4() == nil && srcIPs.srcIPv6 != nil {
+			srcUdp = &net.UDPAddr{IP: srcIPs.srcIPv6}
+		}
+		return net.DialUDP(network, srcUdp, dstUdp)
+	}
+	return nil, fmt.Errorf("not tcp/udp")
+}

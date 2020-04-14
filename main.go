@@ -36,6 +36,8 @@ var (
 	exitWithParent      bool
 	disableHostNetworks bool
 	disableRouting      bool
+	sourceIPv4          IPFlag
+	sourceIPv6          IPFlag
 )
 
 func init() {
@@ -52,11 +54,18 @@ func init() {
 	flag.BoolVar(&exitWithParent, "exit-with-parent", false, "Exit with parent process")
 	flag.BoolVar(&disableHostNetworks, "disable-host-networks", false, "Prevent guest from connecting to IP's that are in host main and local routing tables")
 	flag.BoolVar(&disableRouting, "disable-routing", false, "Prevent guest from connecting anywhere. Inbound traffic via local forwarding still works")
+	flag.Var(&sourceIPv4, "source-ipv4", "When connecting, use the selected Source IP for ipv4")
+	flag.Var(&sourceIPv6, "source-ipv6", "When connecting, use the selected Source IP for ipv6")
 }
 
 func main() {
 	status := Main()
 	os.Exit(status)
+}
+
+type SrcIPs struct {
+	srcIPv4 net.IP
+	srcIPv6 net.IP
 }
 
 type State struct {
@@ -68,6 +77,8 @@ type State struct {
 	// disable host routes
 	denyLocalRoutes *LocalRoutes
 	disableRouting  bool
+
+	srcIPs SrcIPs
 }
 
 func Main() int {
@@ -104,6 +115,8 @@ func Main() int {
 	}
 
 	state.disableRouting = disableRouting
+	state.srcIPs.srcIPv4 = sourceIPv4.ip
+	state.srcIPs.srcIPv6 = sourceIPv6.ip
 
 	logConnections = !quiet
 

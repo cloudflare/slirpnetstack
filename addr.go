@@ -314,3 +314,19 @@ func SplitHostPort(buf string) []string {
 	sliceOfParts = append(sliceOfParts, string(part))
 	return sliceOfParts
 }
+
+type IPFlag struct {
+	ip net.IP
+}
+
+func (f *IPFlag) String() string {
+	return fmt.Sprintf("%s", f.ip)
+}
+
+func (f *IPFlag) Set(value string) error {
+	f.ip = net.ParseIP(value)
+	if f.ip == nil {
+		return fmt.Errorf("Not a valid IP %s", value)
+	}
+	return nil
+}
