@@ -6,6 +6,8 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"github.com/majek/slirpnetstack/unconn"
 )
 
 func main() {
@@ -36,14 +38,16 @@ func main() {
 	udpAddr := lnAddr.(*net.UDPAddr)
 	fmt.Printf("%d\n", udpAddr.Port)
 
+	unconn.Prime(ln)
+
 	var buf [4096]byte
 	for {
-		n, raddr, err := ln.ReadFromUDP(buf[:])
+		n, laddr, raddr, err := unconn.Read(ln, buf[:])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[-] read failed: %s\n", err)
 			continue
 		}
-		ln.WriteToUDP(buf[:n], raddr)
+		unconn.Write(ln, laddr.IP, raddr, buf[:n])
 		if *log {
 			fmt.Printf("%s\n", raddr.String())
 		}
