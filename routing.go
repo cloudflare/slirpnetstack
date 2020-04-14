@@ -43,6 +43,12 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 			return
 		}
 
+		if ok == false && state.disableRouting {
+			// Firewall deny
+			ep.Close()
+			return
+		}
+
 		xconn := gonet.NewUDPConn(s, &wq, ep)
 		conn := &KaUDPConn{Conn: xconn}
 
@@ -76,6 +82,12 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 			return
 		}
 		if ok == false && state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(loc.IP) {
+			// Firewall deny
+			r.Complete(false)
+			return
+		}
+
+		if ok == false && state.disableRouting {
 			// Firewall deny
 			r.Complete(false)
 			return

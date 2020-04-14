@@ -35,6 +35,7 @@ var (
 	pcapPath            string
 	exitWithParent      bool
 	disableHostNetworks bool
+	disableRouting      bool
 )
 
 func init() {
@@ -50,6 +51,7 @@ func init() {
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
 	flag.BoolVar(&exitWithParent, "exit-with-parent", false, "Exit with parent process")
 	flag.BoolVar(&disableHostNetworks, "disable-host-networks", false, "Prevent guest from connecting to IP's that are in host main and local routing tables")
+	flag.BoolVar(&disableRouting, "disable-routing", false, "Prevent guest from connecting anywhere. Inbound traffic via local forwarding still works")
 }
 
 func main() {
@@ -65,6 +67,7 @@ type State struct {
 
 	// disable host routes
 	denyLocalRoutes *LocalRoutes
+	disableRouting  bool
 }
 
 func Main() int {
@@ -99,6 +102,8 @@ func Main() int {
 		state.denyLocalRoutes = &LocalRoutes{}
 		state.denyLocalRoutes.Start(30 * time.Second)
 	}
+
+	state.disableRouting = disableRouting
 
 	logConnections = !quiet
 
