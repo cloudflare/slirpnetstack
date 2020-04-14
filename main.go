@@ -22,18 +22,19 @@ import (
 )
 
 var (
-	fd             int
-	netNsPath      string
-	ifName         string
-	mtu            uint
-	remoteFwd      FwdAddrSlice
-	localFwd       FwdAddrSlice
-	logConnections bool
-	quiet          bool
-	metricAddr     AddrFlags
-	gomaxprocs     int
-	pcapPath       string
-	exitWithParent bool
+	fd                  int
+	netNsPath           string
+	ifName              string
+	mtu                 uint
+	remoteFwd           FwdAddrSlice
+	localFwd            FwdAddrSlice
+	logConnections      bool
+	quiet               bool
+	metricAddr          AddrFlags
+	gomaxprocs          int
+	pcapPath            string
+	exitWithParent      bool
+	disableHostNetworks bool
 )
 
 func init() {
@@ -48,6 +49,7 @@ func init() {
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
 	flag.BoolVar(&exitWithParent, "exit-with-parent", false, "Exit with parent process")
+	flag.BoolVar(&disableHostNetworks, "disable-host-networks", false, "Prevent guest from connecting to IP's that are in host main and local routing tables")
 }
 
 func main() {
@@ -56,10 +58,13 @@ func main() {
 }
 
 type State struct {
-	RoutingDeny  []*net.IPNet
+	RoutingDeny []*net.IPNet
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
+
+	// disable host routes
+	denyLocalRoutes *LocalRoutes
 }
 
 func Main() int {
@@ -88,6 +93,11 @@ func Main() int {
 
 	if gomaxprocs > 0 {
 		runtime.GOMAXPROCS(gomaxprocs)
+	}
+
+	if disableHostNetworks {
+		state.denyLocalRoutes = &LocalRoutes{}
+		state.denyLocalRoutes.Start(30 * time.Second)
 	}
 
 	logConnections = !quiet
@@ -239,6 +249,9 @@ stop:
 	//s.Wait()
 	if metrics != nil {
 		metrics.Close()
+	}
+	if state.denyLocalRoutes != nil {
+		state.denyLocalRoutes.Stop()
 	}
 	return 0
 }

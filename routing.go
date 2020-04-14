@@ -26,6 +26,11 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 			return
 		}
 
+		if ok == false && state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(loc.IP) {
+			// Firewall deny
+			return
+		}
+
 		var wq waiter.Queue
 		ep, err := r.CreateEndpoint(&wq)
 		if err != nil {
@@ -63,6 +68,11 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 		if ok == false && IPNetContains(state.RoutingDeny, loc.IP) {
 			// Firewall deny
 			r.Complete(true)
+			return
+		}
+		if ok == false && state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(loc.IP) {
+			// Firewall deny
+			r.Complete(false)
 			return
 		}
 

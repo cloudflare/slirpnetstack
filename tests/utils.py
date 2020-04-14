@@ -68,7 +68,7 @@ def encode_shell(params):
 
 
 def connect(ip='127.0.0.1', port=0, path=None, udp=False, src='', sport=0,
-            cloexec=True, cleanup=None):
+            cloexec=True, cleanup=None, timeout=2):
     if udp == False:
         p = socket.SOCK_STREAM
     else:
@@ -92,12 +92,16 @@ def connect(ip='127.0.0.1', port=0, path=None, udp=False, src='', sport=0,
 
     # to make tests fail, instead of halt indefintely, let's set the
     # default timeout to say 2 sec.
-    s.settimeout(2)
+    s.settimeout(timeout)
 
-    if not path:
-        s.connect((ip, port))
-    else:
-        path = path.replace("@", "\x00")
-        s.connect(path)
+    try:
+        if not path:
+            s.connect((ip, port))
+        else:
+            path = path.replace("@", "\x00")
+            s.connect(path)
+    except socket.timeout as e:
+        s.close()
+        raise e
 
     return s

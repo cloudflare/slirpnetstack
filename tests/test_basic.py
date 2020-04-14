@@ -539,3 +539,28 @@ class LocalForwardingPPTest(base.TestCase):
         s.close()
         self.assertIn("abcd::1", read_log())
         self.assertIn("local-fwd PP done", p.stdout_line())
+
+
+class RoutingTestSecurity(base.TestCase):
+    @base.isolateHostNetwork()
+    def test_disabe_host_networks(self):
+        ''' Test tcp routing security, specifically --disable-host-networks option. '''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+        p = self.prun("--disable-host-networks")
+        self.assertStartSync(p)
+        with self.guest_netns():
+            for dst in ("192.168.1.100", "3ffe::100"):
+                with self.assertRaises(socket.timeout):
+                    utils.connect(port=echo_tcp_port, ip=dst, timeout=0.3)
+                s = utils.connect(port=echo_udp_port, ip=dst, udp=True)
+                s.sendall(b"ala")
+                s.close()
+
+        # Connections from host, to have something in logs. The
+        # connection attempts above should not trigger any logs.
+        self.assertTcpEcho(ip="127.0.0.1", src='127.1.2.3', port=echo_tcp_port)
+        self.assertIn("127.1.2.3", tcp_log())
+
+        self.assertUdpEcho(ip="127.0.0.1", src='127.1.2.4', port=echo_udp_port)
+        self.assertIn("127.1.2.4", udp_log())
