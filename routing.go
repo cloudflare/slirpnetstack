@@ -14,6 +14,16 @@ import (
 
 func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest) {
 	h := func(r *udp.ForwarderRequest) {
+		// Create endpoint as quickly as possible to avoid UDP
+		// race conditions, when user sends multiple frames
+		// one after another.
+		var wq waiter.Queue
+		ep, err := r.CreateEndpoint(&wq)
+		if err != nil {
+			fmt.Printf("r.CreateEndpoint() = %v\n", err)
+			return
+		}
+
 		id := r.ID()
 		loc := &net.UDPAddr{
 			IP:   netParseIP(id.LocalAddress.String()),
@@ -23,18 +33,13 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 		rf, ok := state.remoteUdpFwd[loc.String()]
 		if ok == false && IPNetContains(state.RoutingDeny, loc.IP) {
 			// Firewall deny
+			ep.Close()
 			return
 		}
 
 		if ok == false && state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(loc.IP) {
 			// Firewall deny
-			return
-		}
-
-		var wq waiter.Queue
-		ep, err := r.CreateEndpoint(&wq)
-		if err != nil {
-			fmt.Printf("r.CreateEndpoint() = %v\n", err)
+			ep.Close()
 			return
 		}
 
