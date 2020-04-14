@@ -57,7 +57,6 @@ func main() {
 
 type State struct {
 	RoutingDeny  []*net.IPNet
-	RoutingAllow []*net.IPNet
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
@@ -116,11 +115,6 @@ func Main() int {
 		MustParseCIDR("::/96"),
 		MustParseCIDR("::ffff:0:0:0/96"),
 		MustParseCIDR("64:ff9b::/96"),
-	)
-
-	state.RoutingAllow = append(state.RoutingAllow,
-		MustParseCIDR("0.0.0.0/0"),
-		MustParseCIDR("::/0"),
 	)
 
 	log.SetLevel(log.Warning)

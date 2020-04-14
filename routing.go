@@ -25,10 +25,6 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 			// Firewall deny
 			return
 		}
-		if ok == false && IPNetContains(state.RoutingAllow, loc.IP) == false {
-			// Firewall !allow
-			return
-		}
 
 		var wq waiter.Queue
 		ep, err := r.CreateEndpoint(&wq)
@@ -66,11 +62,6 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 		rf, ok := state.remoteTcpFwd[loc.String()]
 		if ok == false && IPNetContains(state.RoutingDeny, loc.IP) {
 			// Firewall deny
-			r.Complete(true)
-			return
-		}
-		if ok == false && IPNetContains(state.RoutingAllow, loc.IP) == false {
-			// Firewall !allow
 			r.Complete(true)
 			return
 		}
