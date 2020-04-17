@@ -324,7 +324,7 @@ func (f *IPFlag) String() string {
 }
 
 func (f *IPFlag) Set(value string) error {
-	f.ip = net.ParseIP(value)
+	f.ip = netParseOrResolveIP(value)
 	if f.ip == nil {
 		return fmt.Errorf("Not a valid IP %s", value)
 	}
