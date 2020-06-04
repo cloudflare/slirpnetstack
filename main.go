@@ -208,9 +208,9 @@ func Main() int {
 		var srv Listener
 		switch lf.network {
 		case "tcp":
-			srv, err = LocalForwardTCP(&state, s, &lf, doneChannel)
+			srv, err = LocalForwardTCP(&state, s, lf, doneChannel)
 		case "udp":
-			srv, err = LocalForwardUDP(&state, s, &lf, doneChannel)
+			srv, err = LocalForwardUDP(&state, s, lf, doneChannel)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[!] Failed to listen on %s://%s:%d: %s\n",
