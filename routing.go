@@ -100,7 +100,7 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 			return
 		}
 		r.Complete(false)
-		ep.SetSockOptInt(tcpip.DelayOption, 0)
+		ep.SetSockOptBool(tcpip.DelayOption, false)
 
 		xconn := gonet.NewTCPConn(&wq, ep)
 		conn := &GonetTCPConn{xconn, ep}

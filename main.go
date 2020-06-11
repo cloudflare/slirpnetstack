@@ -186,7 +186,7 @@ func Main() int {
 		if err != nil {
 			panic(fmt.Sprintf("Failed to open PCAP file: %s", err))
 		}
-		if linkEP, err = sniffer.NewWithFile(linkEP, pcapFile, uint32(mtu)); err != nil {
+		if linkEP, err = sniffer.NewWithWriter(linkEP, pcapFile, uint32(mtu)); err != nil {
 			panic(fmt.Sprintf("Failed to sniff linkEP: %s", err))
 		}
 		defer pcapFile.Close()

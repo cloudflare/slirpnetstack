@@ -222,10 +222,10 @@ type GonetTCPConn struct {
 }
 
 func (c *GonetTCPConn) SetTimeouts(kaInterval time.Duration, kaCount int) error {
-	c.ep.SetSockOpt(tcpip.KeepaliveEnabledOption(1))
+	c.ep.SetSockOptBool(tcpip.KeepaliveEnabledOption, true)
 	c.ep.SetSockOpt(tcpip.KeepaliveIdleOption(kaInterval))
 	c.ep.SetSockOpt(tcpip.KeepaliveIntervalOption(kaInterval))
-	c.ep.SetSockOpt(tcpip.KeepaliveCountOption(kaCount))
+	c.ep.SetSockOptInt(tcpip.KeepaliveCountOption, kaCount)
 	ut := UserTimeoutFromKeepalive(kaInterval, kaCount)
 	c.ep.SetSockOpt(tcpip.TCPUserTimeoutOption(ut))
 	return nil

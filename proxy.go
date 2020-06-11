@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+// For each pair of connections, there may be four errors. Error on
+// reading the local/host conn, error on writing to local/host conn,
+// error on reading from remote/guest end, error on writing to
+// remote/guest end. It's important to distinguish which one was
+// first, so 0 means LocalRead, 1 means LocalWrite, 2 means RemoteRead
+// and 3 means RemoteWrite was first.
 type ProxyError struct {
 	LocalRead   error
 	LocalWrite  error
