@@ -148,5 +148,7 @@ func connSplice(local KaConn, remote KaConn, sppHeader []byte) ProxyError {
 	case first == 1 && pe.LocalWrite != nil:
 		pe.First = 1
 	}
+	local.Close()
+	remote.Close()
 	return pe
 }
