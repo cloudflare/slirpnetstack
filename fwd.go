@@ -105,16 +105,16 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf FwdAddr, doneChannel <-cha
 	return &UDPListner{srv}, nil
 }
 
-func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, buf []byte, proxyProtocol bool) {
+func LocalForward(state *State, s *stack.Stack, host KaConn, gaddr net.Addr, buf []byte, proxyProtocol bool) {
 	var (
 		err          error
-		raddr        = local.RemoteAddr()
+		raddr        = host.RemoteAddr()
 		ppSrc, ppDst net.Addr
 		sppHeader    []byte
 	)
 	if proxyProtocol && buf == nil {
 		buf = make([]byte, 4096)
-		n, err := local.Read(buf)
+		n, err := host.Read(buf)
 		if err != nil {
 			goto pperror
 		}
@@ -145,7 +145,7 @@ func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, bu
 			ppPrefix = ""
 		)
 		if proxyProtocol == false {
-			// When doing local forward, if the source IP of local
+			// When doing local forward, if the source IP of host
 			// connection had routable IP (unlike
 			// 127.0.0.1)... well... spoof it! The client might find it
 			// useful who launched the connection in the first place.
@@ -171,28 +171,27 @@ func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, bu
 			// number on our side is not safe, useless,
 			// confusing and very bug prone.
 			srcIP = netAddrSetPort(srcIP, 0)
-
 		}
 
 		if netAddrPort(gaddr) == 0 {
 			// If the guest has dport equal to zero, fill
 			// it up somehow. First guess - use dport of
-			// local connection.
-			localPort := netAddrPort(local.LocalAddr())
+			// host connection.
+			hostPort := netAddrPort(host.LocalAddr())
 
 			// Alternatively if we got dport from PP, use that
 			if ppDst != nil {
-				localPort = netAddrPort(ppDst)
+				hostPort = netAddrPort(ppDst)
 			}
 
-			gaddr = netAddrSetPort(gaddr, localPort)
+			gaddr = netAddrSetPort(gaddr, hostPort)
 		}
 
 		if logConnections {
 			fmt.Printf("[+] %s://%s/%s/%s local-fwd %sconn\n",
 				gaddr.Network(),
 				raddr,
-				local.LocalAddr(),
+				host.LocalAddr(),
 				gaddr.String(),
 				ppPrefix)
 		}
@@ -201,19 +200,19 @@ func LocalForward(state *State, s *stack.Stack, local KaConn, gaddr net.Addr, bu
 
 		var pe ProxyError
 		if err != nil {
-			SetResetOnClose(local)
-			local.Close()
-			pe.LocalRead = fmt.Errorf("%s", err)
-			pe.First = 0
+			SetResetOnClose(host)
+			host.Close()
+			pe.RemoteRead = fmt.Errorf("%s", err)
+			pe.First = 2
 		} else {
 			guest.Write(buf)
-			pe = connSplice(local, guest, sppHeader)
+			pe = connSplice(host, guest, sppHeader)
 		}
 		if logConnections {
 			fmt.Printf("[-] %s://%s/%s/%s local-fwd %sdone: %s\n",
 				gaddr.Network(),
 				raddr,
-				local.LocalAddr(),
+				host.LocalAddr(),
 				gaddr.String(),
 				ppPrefix,
 				pe)
@@ -225,10 +224,10 @@ pperror:
 		fmt.Printf("[!] %s://%s/%s/%s local-fwd PP error: %s\n",
 			gaddr.Network(),
 			raddr,
-			local.LocalAddr(),
+			host.LocalAddr(),
 			gaddr.String(),
 			err)
 	}
-	local.Close()
+	host.Close()
 	return
 }
