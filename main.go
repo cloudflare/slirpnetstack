@@ -95,6 +95,14 @@ func Main() int {
 	signal.Notify(sigCh, syscall.SIGINT)
 	signal.Notify(sigCh, syscall.SIGTERM)
 
+	for i := uint64(1024 * 1024); i > 0; i /= 2 {
+		rLimit := syscall.Rlimit{Max: i, Cur: i}
+		err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+		if err == nil {
+			break
+		}
+	}
+
 	// flag.Parse might be called from tests first. To avoid
 	// duplicated items in list, ensure parsing is done only once.
 	if flag.Parsed() == false {
