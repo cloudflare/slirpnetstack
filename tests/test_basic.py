@@ -98,6 +98,8 @@ class BasicTest(base.TestCase):
         self.assertEqual(port, xport)
         # [!] Failed to listen on udp://127.0.0.1:45295
         self.assertIn("Failed to listen on udp://127.0.0.1", p.stderr_line())
+        p.close()
+        self.assertEqual(p.rc, 255, "exit code should be 255")
 
     def test_basic_ping6(self):
         '''Due to how netstack is configured, we will answer to ping against
