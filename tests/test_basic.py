@@ -36,6 +36,7 @@ class BasicTest(base.TestCase):
         with self.guest_netns():
             r = os.system("ping -q 1.1.1.1 -c 1 -n > /dev/null")
             self.assertEqual(r, 0)
+        caught_sizes = set()
         with open(pcap, 'rb') as f:
             data = f.read(24)
             header = struct.unpack(">LHHLLLL", data)
@@ -44,7 +45,8 @@ class BasicTest(base.TestCase):
             (seconds, useconds, captured_length, packet_length) = struct.unpack(">LLLL", data)
             # we generally expect icmp echo request at 28 bytes, but
             # sometimes see some other packet at 76 bytes (arp?)
-            self.assertIn(captured_length, (28,76))
+            caught_sizes.add( captured_length )
+        self.assertIn(28, caught_sizes)
 
     def test_fd(self):
         ''' Check inherinting tuntap fd with -fd option '''

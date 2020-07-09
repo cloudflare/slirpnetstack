@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,12 @@ type ProxyError struct {
 	First       int
 }
 
+// See this and cry: https://github.com/golang/go/issues/4373
+func ErrIsMyFault(err error) bool {
+	s := err.Error()
+	return strings.HasSuffix(s, "use of closed network connection")
+}
+
 func (pe ProxyError) String() string {
 	x := []string{
 		fmt.Sprintf("%s", pe.LocalRead),
@@ -26,16 +33,16 @@ func (pe ProxyError) String() string {
 		fmt.Sprintf("%s", pe.RemoteRead),
 		fmt.Sprintf("%s", pe.RemoteWrite),
 	}
-	if pe.LocalRead == nil {
+	if pe.LocalRead == nil || ErrIsMyFault(pe.LocalRead) {
 		x[0] = "0"
 	}
-	if pe.LocalWrite == nil {
+	if pe.LocalWrite == nil || ErrIsMyFault(pe.LocalWrite) {
 		x[1] = "0"
 	}
-	if pe.RemoteRead == nil {
+	if pe.RemoteRead == nil || ErrIsMyFault(pe.RemoteRead) {
 		x[2] = "0"
 	}
-	if pe.RemoteWrite == nil {
+	if pe.RemoteWrite == nil || ErrIsMyFault(pe.RemoteWrite) {
 		x[3] = "0"
 	}
 	x[pe.First] = fmt.Sprintf("[%s]", x[pe.First])
@@ -105,6 +112,16 @@ func proxyOneFlow(
 		}
 	}
 
+	// Synchronize with parent. It's important to do this _before_
+	// closing sockets, since .Close() might trigger the other
+	// proxy goroutine to exit with "use of closed fd"
+	// error. There is no race here. We can push to channel
+	// without closing yet.
+	doneCh <- scDir
+
+	in.SetTimeouts(5*time.Second, 2)
+	out.SetTimeouts(5*time.Second, 2)
+
 	if c, ok := in.(Closer); ok {
 		c.CloseRead()
 	} else {
@@ -115,12 +132,6 @@ func proxyOneFlow(
 	} else {
 		out.Close()
 	}
-
-	in.SetTimeouts(5*time.Second, 2)
-	out.SetTimeouts(5*time.Second, 2)
-
-	// Synchronize with parent.
-	doneCh <- scDir
 }
 
 func connSplice(local KaConn, remote KaConn, sppHeader []byte) ProxyError {

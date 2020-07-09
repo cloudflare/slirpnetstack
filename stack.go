@@ -104,6 +104,11 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 		tcp.ReceiveBufferSizeOption{1, rcvBufferSize, rcvBufferSize})
 	s.SetTransportProtocolOption(tcp.ProtocolNumber,
 		tcp.SendBufferSizeOption{1, sndBufferSize, sndBufferSize})
+
+	// Enable Receive Buffer Auto-Tuning, see:
+	// https://github.com/google/gvisor/issues/1666
+	s.SetTransportProtocolOption(tcp.ProtocolNumber,
+		tcpip.ModerateReceiveBufferOption(true))
 	return s
 }
 
