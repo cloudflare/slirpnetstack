@@ -117,13 +117,9 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 }
 
 func RoutingForward(guest KaConn, srcIPs *SrcIPs, loc net.Addr) {
-	ga := guest.RemoteAddr()
-	if logConnections {
-		fmt.Printf("[+] %s://%s/%s Routing conn new\n",
-			loc.Network(),
-			ga,
-			loc.String())
-	}
+	// Cache guest.RemoteAddr() because it becomes nil on
+	// guest.Close() for UDP.
+	guestRemoteAddr := guest.RemoteAddr()
 
 	var pe ProxyError
 	xhost, err := OutboundDial(srcIPs, loc)
@@ -132,7 +128,21 @@ func RoutingForward(guest KaConn, srcIPs *SrcIPs, loc net.Addr) {
 		guest.Close()
 		pe.RemoteRead = err
 		pe.First = 2
+		if logConnections {
+			fmt.Printf("[!] %s://%s/%s Routing conn error: %s\n",
+				loc.Network(),
+				guestRemoteAddr,
+				loc.String(),
+				pe)
+		}
 	} else {
+		if logConnections {
+			fmt.Printf("[+] %s://%s/%s-%s Routing conn new\n",
+				loc.Network(),
+				guestRemoteAddr,
+				xhost.LocalAddr(),
+				xhost.RemoteAddr())
+		}
 		var host KaConn
 		switch v := xhost.(type) {
 		case *net.TCPConn:
@@ -141,25 +151,18 @@ func RoutingForward(guest KaConn, srcIPs *SrcIPs, loc net.Addr) {
 			host = &KaUDPConn{Conn: v}
 		}
 		pe = connSplice(guest, host, nil)
-	}
-	if logConnections {
-		fmt.Printf("[-] %s://%s/%s Routing conn done: %s\n",
-			loc.Network(),
-			ga,
-			loc.String(),
-			pe)
+		if logConnections {
+			fmt.Printf("[-] %s://%s/%s-%s Routing conn done: %s\n",
+				loc.Network(),
+				guestRemoteAddr,
+				xhost.LocalAddr(),
+				xhost.RemoteAddr(),
+				pe)
+		}
 	}
 }
 
 func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
-	ga := guest.RemoteAddr()
-	if logConnections {
-		fmt.Printf("[+] %s://%s/%s %s-remote-fwd conn new\n",
-			rf.network,
-			guest.RemoteAddr(),
-			guest.LocalAddr(),
-			rf.HostAddr().String())
-	}
 	var pe ProxyError
 	xhost, err := OutboundDial(srcIPs, rf.HostAddr())
 	if err != nil {
@@ -167,7 +170,23 @@ func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
 		guest.Close()
 		pe.RemoteRead = err
 		pe.First = 2
+		if logConnections {
+			fmt.Printf("[!] %s://%s-%s/%s remote-fwd conn error: %s\n",
+				rf.network,
+				guest.RemoteAddr(),
+				guest.LocalAddr(),
+				rf.HostAddr(),
+				pe)
+		}
 	} else {
+		if logConnections {
+			fmt.Printf("[+] %s://%s-%s/%s-%s remote-fwd conn new\n",
+				rf.network,
+				guest.RemoteAddr(),
+				guest.LocalAddr(),
+				xhost.LocalAddr(),
+				xhost.RemoteAddr())
+		}
 		var host KaConn
 		switch v := xhost.(type) {
 		case *net.TCPConn:
@@ -176,13 +195,14 @@ func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
 			host = &KaUDPConn{Conn: v}
 		}
 		pe = connSplice(guest, host, nil)
-	}
-	if logConnections {
-		fmt.Printf("[-] %s://%s/%s %s-remote-fwd conn done: %s\n",
-			rf.network,
-			ga,
-			guest.LocalAddr(),
-			rf.HostAddr().String(),
-			pe)
+		if logConnections {
+			fmt.Printf("[-] %s://%s-%s/%s-%s remote-fwd conn done: %s\n",
+				rf.network,
+				guest.RemoteAddr(),
+				guest.LocalAddr(),
+				xhost.LocalAddr(),
+				xhost.RemoteAddr(),
+				pe)
+		}
 	}
 }
