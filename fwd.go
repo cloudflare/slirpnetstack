@@ -163,7 +163,6 @@ func LocalForward(state *State, s *stack.Stack, host KaConn, gaddr net.Addr, buf
 				// original IP.
 			}
 		}
-
 		if srcIP != nil {
 			// It's very nice the proxy-protocol (or just
 			// client) gave us client port number, but we
@@ -209,11 +208,12 @@ func LocalForward(state *State, s *stack.Stack, host KaConn, gaddr net.Addr, buf
 			pe = connSplice(host, guest, sppHeader)
 		}
 		if logConnections {
-			fmt.Printf("[-] %s://%s/%s/%s local-fwd %sdone: %s\n",
+			fmt.Printf("[-] %s://%s/%s/%s (guest-src:%s) local-fwd %sdone: %s\n",
 				gaddr.Network(),
 				raddr,
 				host.LocalAddr(),
 				gaddr.String(),
+				guest.LocalAddr(),
 				ppPrefix,
 				pe)
 		}
