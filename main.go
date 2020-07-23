@@ -114,10 +114,6 @@ func Main() int {
 		flag.Parse()
 	}
 
-	if exitWithParent {
-		system.ParentDeathSignal(unix.SIGTERM).Set()
-	}
-
 	if gomaxprocs > 0 {
 		runtime.GOMAXPROCS(gomaxprocs)
 	}
@@ -181,6 +177,15 @@ func Main() int {
 		if mtu == 0 {
 			mtu = 1500
 		}
+	}
+
+	// This must be done after all the namespace dance, otherwise
+	// it doesn't work. I think it has to do with lack of
+	// PR_SET_PDEATHSIG inheritance on fork(), or maybe it is
+	// cleared on namespace join? Dunno. Remember SIGTERM is
+	// supposed to be gracefully handled.
+	if exitWithParent {
+		system.ParentDeathSignal(unix.SIGTERM).Set()
 	}
 
 	// With high mtu, low packet loss and low latency over tuntap,
