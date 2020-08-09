@@ -330,3 +330,138 @@ func (f *IPFlag) Set(value string) error {
 	}
 	return nil
 }
+
+type IPPortRange struct {
+	network string
+	ipRange *net.IPNet
+	portMin uint16
+	portMax uint16
+}
+
+type IPPortRangeSlice []IPPortRange
+
+func (p *IPPortRange) String() string {
+	a := []string{
+		p.network,
+		"://",
+	}
+	if p.ipRange.IP.To4() == nil {
+		a = append(a, "[")
+	}
+	a = append(a, p.ipRange.String())
+	if p.ipRange.IP.To4() == nil {
+		a = append(a, "]")
+	}
+	if p.portMin != 0 || p.portMax != 0 {
+		a = append(a, ":", fmt.Sprintf("%d-%d", p.portMin, p.portMax))
+	}
+	return strings.Join(a, "")
+}
+
+func (f *IPPortRangeSlice) String() string {
+	var a []string
+	for _, p := range *f {
+		a = append(a, p.String())
+	}
+	return strings.Join(a, ",")
+}
+
+func (f *IPPortRangeSlice) Set(commaValue string) error {
+	for _, value := range strings.Split(commaValue, ",") {
+		network, rest := "", ""
+		p := strings.SplitN(value, "://", 2)
+		switch len(p) {
+		case 2:
+			network = p[0]
+			rest = p[1]
+		case 1:
+			network = "tcp"
+			rest = p[0]
+		}
+
+		var (
+			pMin, pMax uint64
+			err1, err2 error
+		)
+
+		p = SplitHostPort(rest)
+		if len(p) < 1 || len(p) > 2 {
+			return fmt.Errorf("error parsing ipportrange")
+		}
+		host := p[0]
+
+		if len(p) == 2 {
+			portRange := p[1]
+			pn := strings.SplitN(portRange, "-", 2)
+			switch len(pn) {
+			case 2:
+				pMin, err1 = strconv.ParseUint(pn[0], 10, 16)
+				pMax, err2 = strconv.ParseUint(pn[1], 10, 16)
+			case 1:
+				pMin, err1 = strconv.ParseUint(pn[0], 10, 16)
+				pMax, err2 = pMin, err1
+			}
+			if err1 != nil {
+				return err1
+			}
+			if err2 != nil {
+				return err2
+			}
+			if pMax < pMin {
+				return fmt.Errorf("min port must be smaller equal than max")
+			}
+		}
+
+		_, ipnet, err := net.ParseCIDR(host)
+		if err != nil {
+			ip := netParseOrResolveIP(host)
+			if ip == nil {
+				return err
+			}
+			var mask net.IPMask
+			if ip.To4() == nil {
+				mask = net.CIDRMask(128, 128)
+			} else {
+				mask = net.CIDRMask(32, 32)
+			}
+
+			ipnet = &net.IPNet{
+				IP:   ip,
+				Mask: mask,
+			}
+		}
+
+		pr := IPPortRange{
+			network: network,
+			ipRange: ipnet,
+			portMin: uint16(pMin),
+			portMax: uint16(pMax),
+		}
+
+		*f = append(*f, pr)
+	}
+	return nil
+}
+
+func (f *IPPortRangeSlice) Contains(addr net.Addr) bool {
+	addrNetwork := addr.Network()
+	addrPort := uint16(netAddrPort(addr))
+	addrIP := netAddrIP(addr)
+	for _, p := range *f {
+		if p.network != addrNetwork {
+			// wrong proto
+			continue
+		}
+		if p.portMin != 0 || p.portMax != 0 {
+			if addrPort < p.portMin || addrPort > p.portMax {
+				// port out of range if ports are in the selector
+				continue
+			}
+		}
+		if !p.ipRange.Contains(addrIP) {
+			continue
+		}
+		return true
+	}
+	return false
+}

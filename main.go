@@ -38,6 +38,8 @@ var (
 	disableRouting      bool
 	sourceIPv4          IPFlag
 	sourceIPv6          IPFlag
+	allowRange          IPPortRangeSlice
+	denyRange           IPPortRangeSlice
 )
 
 func init() {
@@ -56,6 +58,8 @@ func init() {
 	flag.BoolVar(&disableRouting, "disable-routing", false, "Prevent guest from connecting anywhere. Inbound traffic via local forwarding still works")
 	flag.Var(&sourceIPv4, "source-ipv4", "When connecting, use the selected Source IP for ipv4")
 	flag.Var(&sourceIPv6, "source-ipv6", "When connecting, use the selected Source IP for ipv6")
+	flag.Var(&allowRange, "allow", "When routing, allow specified IP prefix and port range")
+	flag.Var(&denyRange, "deny", "When routing, deny specified IP prefix and port range")
 }
 
 func main() {
@@ -77,6 +81,8 @@ type State struct {
 	// disable host routes
 	denyLocalRoutes *LocalRoutes
 	disableRouting  bool
+	allowRange      IPPortRangeSlice
+	denyRange       IPPortRangeSlice
 
 	srcIPs SrcIPs
 }
@@ -126,6 +132,8 @@ func Main() int {
 	state.disableRouting = disableRouting
 	state.srcIPs.srcIPv4 = sourceIPv4.ip
 	state.srcIPs.srcIPv6 = sourceIPv6.ip
+	state.allowRange = allowRange
+	state.denyRange = denyRange
 
 	logConnections = !quiet
 

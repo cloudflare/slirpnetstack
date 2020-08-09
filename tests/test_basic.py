@@ -547,7 +547,7 @@ class LocalForwardingPPTest(base.TestCase):
 
 class RoutingTestSecurity(base.TestCase):
     @base.isolateHostNetwork()
-    def test_disabe_host_networks(self):
+    def test_disable_host_networks(self):
         ''' Test tcp routing security, specifically --disable-host-networks option. '''
         echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
@@ -629,3 +629,85 @@ class RoutingTestSecurity(base.TestCase):
                 pass
             self.assertIn("Routing conn new", p.stdout_line())
             self.assertIn("::1", udp_log())
+
+    @base.isolateHostNetwork()
+    def test_allow_range_all_ports(self):
+        ''' Test --allow and --deny with --disable-routing - all ports'''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+        p = self.prun("--disable-routing --allow=tcp://192.168.1.100,udp://192.168.1.100,tcp://[3ffe::100],udp://[3ffe::100] --deny=tcp://192.168.1.100,tcp://[3ffe::100]")
+        self.assertStartSync(p)
+        with self.guest_netns():
+            for dst in ("192.168.1.100", "3ffe::100"):
+                self.assertTcpRefusedError(port=echo_tcp_port, ip=dst)
+                s = utils.connect(port=echo_udp_port, ip=dst, udp=True)
+                s.sendall(b"ala")
+                s.close()
+                self.assertIn(dst, udp_log())
+
+        # Connections from host, to have something in logs. The
+        # connection attempts above should not trigger any logs.
+        self.assertTcpEcho(ip="127.0.0.1", src='127.1.2.3', port=echo_tcp_port)
+        self.assertIn("127.1.2.3", tcp_log())
+
+    @base.isolateHostNetwork()
+    def test_deny_range_some_ports(self):
+        ''' Test --allow and --deny with --disable-routing - some ports '''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+        p = self.prun("--allow=udp://192.168.1.100:100-200 --allow=tcp://192.168.1.100:100-200 --deny=tcp://192.168.1.100:%d,tcp://[3ffe::100]:%d-%d" % (
+            echo_tcp_port, echo_tcp_port, echo_tcp_port))
+        self.assertStartSync(p)
+        with self.guest_netns():
+            for dst in ("192.168.1.100", "3ffe::100"):
+                self.assertTcpRefusedError(port=echo_tcp_port, ip=dst)
+                s = utils.connect(port=echo_udp_port, ip=dst, udp=True)
+                s.sendall(b"ala")
+                s.close()
+                self.assertIn(dst, udp_log())
+
+        # Connections from host, to have something in logs. The
+        # connection attempts above should not trigger any logs.
+        self.assertTcpEcho(ip="127.0.0.1", src='127.1.2.3', port=echo_tcp_port)
+        self.assertIn("127.1.2.3", tcp_log())
+
+    @base.isolateHostNetwork()
+    def test_allow_cover_cases(self):
+        ''' Test --allow parsing corner cases '''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+        p = self.prun("--disable-routing --allow=192.168.1.100:%d" % (echo_tcp_port,))
+        self.assertStartSync(p)
+        with self.guest_netns():
+            self.assertTcpEcho(port=echo_tcp_port, ip="192.168.1.100")
+        self.assertIn("192.168.1.100", tcp_log())
+        p.close()
+
+        p = self.prun("--allow=notahost")
+        o = p.stdout_line()
+        self.assertFalse(o)
+        e = p.stderr_line()
+        self.assertIn('invalid value "notahost" for flag -allow: invalid CIDR address', e)
+        p.close()
+
+        p = self.prun("--allow=localhost:a")
+        o = p.stdout_line()
+        self.assertFalse(o)
+        e = p.stderr_line()
+        self.assertIn('invalid value "localhost:a" for flag -allow: strconv.ParseUint: parsing "a": invalid syntax', e)
+        p.close()
+
+        p = self.prun("--allow=localhost:0-b")
+        o = p.stdout_line()
+        self.assertFalse(o)
+        e = p.stderr_line()
+        self.assertIn('invalid value "localhost:0-b" for flag -allow: strconv.ParseUint: parsing "b": invalid syntax', e)
+        p.close()
+
+        p = self.prun("--allow=localhost:2-1")
+        o = p.stdout_line()
+        self.assertFalse(o)
+        e = p.stderr_line()
+        self.assertIn('invalid value "localhost:2-1" for flag -allow: min port must be smaller equal than max', e)
+        p.close()
+

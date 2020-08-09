@@ -130,3 +130,45 @@ To enter the container run:
 
 From now on you should have internet connectivity in the isolated
 gvisor container, supplied by slirpnetstack.
+
+
+Routing security
+----------------
+
+By default the guest is totally insecure - there is no network
+isolation and it may freely access resources on the host. For sanity
+we block traffic to the following IP prefixes:
+
+ - 0.0.0.0/8
+ - 10.0.2.0/24
+ - 127.0.0.0/8
+ - 255.255.255.255/32
+ - ::/128
+ - ::1/128
+ - ::/96
+ - ::ffff:0:0:0/96
+ - 64:ff9b::/96
+
+Traffic to any other target IP address will be "routed" as it was
+created on host natively.
+
+To add a bit more network isolation user may select:
+
+--disable-host-networks which will deny routing to IP prefixes
+configured on the host. For example if host has 192.168.1.0/24 prefix
+configured on one networking interface, it will be scraped by
+slirpnetstack and added to blacklist. This is sufficient option if you
+are afraid of exposing local host resources to guest.
+
+--disable-routing disables any routing. This means the only outbound
+traffic from network namespace must go via local-forward exceptions.
+
+To allow some customization, there are two options --deny --allow that
+can override the above --disable-host-networks and --disable-routing
+for specific IP prefixes and port ranges. For example, in case of --disable-routing:
+
+ --allow=udp://192.168.1.0/24:53-53
+
+Would allow connectivity to any IP in the given 192.168.1.0/24 network
+prefix and in the port range of 53-53 ports (one port in this case)
+over protocol UDP. `--allow` takes precedence over `--deny`.

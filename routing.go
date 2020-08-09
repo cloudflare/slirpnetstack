@@ -12,13 +12,22 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 )
 
-func FirewallRoutingBlock(state *State, dst net.IP) (bool, bool) {
-	if IPNetContains(state.RoutingDeny, dst) {
+func FirewallRoutingBlock(state *State, addr net.Addr) (_block bool, _rst bool) {
+	if state.denyRange.Contains(addr) {
+		return true, true
+	}
+
+	if state.allowRange.Contains(addr) {
+		return false, false
+	}
+
+	addrIP := netAddrIP(addr)
+	if IPNetContains(state.RoutingDeny, addrIP) {
 		// Firewall deny
 		return true, true
 	}
 
-	if state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(dst) {
+	if state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(addrIP) {
 		// Firewall deny
 		return true, false
 	}
@@ -27,6 +36,7 @@ func FirewallRoutingBlock(state *State, dst net.IP) (bool, bool) {
 		// Firewall deny
 		return true, false
 	}
+
 	return false, false
 }
 
@@ -50,7 +60,7 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 
 		rf, ok := state.remoteUdpFwd[loc.String()]
 		if ok == false {
-			if block, _ := FirewallRoutingBlock(state, loc.IP); block {
+			if block, _ := FirewallRoutingBlock(state, loc); block {
 				ep.Close()
 				return
 			}
@@ -84,7 +94,7 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 
 		rf, ok := state.remoteTcpFwd[loc.String()]
 		if ok == false {
-			if block, rst := FirewallRoutingBlock(state, loc.IP); block {
+			if block, rst := FirewallRoutingBlock(state, loc); block {
 				r.Complete(rst)
 				return
 			}
