@@ -12,6 +12,24 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 )
 
+func FirewallRoutingBlock(state *State, dst net.IP) (bool, bool) {
+	if IPNetContains(state.RoutingDeny, dst) {
+		// Firewall deny
+		return true, true
+	}
+
+	if state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(dst) {
+		// Firewall deny
+		return true, false
+	}
+
+	if state.disableRouting {
+		// Firewall deny
+		return true, false
+	}
+	return false, false
+}
+
 func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest) {
 	h := func(r *udp.ForwarderRequest) {
 		// Create endpoint as quickly as possible to avoid UDP
@@ -31,22 +49,11 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 		}
 
 		rf, ok := state.remoteUdpFwd[loc.String()]
-		if ok == false && IPNetContains(state.RoutingDeny, loc.IP) {
-			// Firewall deny
-			ep.Close()
-			return
-		}
-
-		if ok == false && state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(loc.IP) {
-			// Firewall deny
-			ep.Close()
-			return
-		}
-
-		if ok == false && state.disableRouting {
-			// Firewall deny
-			ep.Close()
-			return
+		if ok == false {
+			if block, _ := FirewallRoutingBlock(state, loc.IP); block {
+				ep.Close()
+				return
+			}
 		}
 
 		xconn := gonet.NewUDPConn(s, &wq, ep)
@@ -76,21 +83,11 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 		}
 
 		rf, ok := state.remoteTcpFwd[loc.String()]
-		if ok == false && IPNetContains(state.RoutingDeny, loc.IP) {
-			// Firewall deny
-			r.Complete(true)
-			return
-		}
-		if ok == false && state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(loc.IP) {
-			// Firewall deny
-			r.Complete(false)
-			return
-		}
-
-		if ok == false && state.disableRouting {
-			// Firewall deny
-			r.Complete(false)
-			return
+		if ok == false {
+			if block, rst := FirewallRoutingBlock(state, loc.IP); block {
+				r.Complete(rst)
+				return
+			}
 		}
 
 		var wq waiter.Queue
