@@ -239,8 +239,8 @@ func Main() int {
 			srv, err = LocalForwardUDP(&state, s, lf, doneChannel)
 		}
 		if err != nil {
-			failNow(fmt.Sprintf("[!] Failed to listen on %s://%s:%d: %s\n",
-				lf.network, lf.bind.Addr, lf.bind.Port, err))
+			failNow(fmt.Sprintf("[!] Failed to listen on %s://%s: %s\n",
+				lf.network, lf.bind.String(), err))
 		} else {
 			ppPrefix := ""
 			if lf.proxyProtocol {
@@ -255,8 +255,8 @@ func Main() int {
 	}
 
 	for i, rf := range remoteFwd {
-		fmt.Printf("[+] Accepting on remote side %s://%s:%d\n",
-			rf.network, rf.bind.Addr.String(), rf.bind.Port)
+		fmt.Printf("[+] Accepting on remote side %s://%s\n",
+			rf.network, rf.bind.String())
 		switch rf.network {
 		case "tcp":
 			state.remoteTcpFwd[rf.BindAddr().String()] = &remoteFwd[i]

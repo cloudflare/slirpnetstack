@@ -28,8 +28,8 @@ import (
 */
 type FwdAddr struct {
 	network       string
-	bind          tcpip.FullAddress
-	host          tcpip.FullAddress
+	bind          defAddress
+	host          defAddress
 	kaEnable      bool
 	kaInterval    time.Duration
 	proxyProtocol bool
@@ -40,10 +40,10 @@ type FwdAddrSlice []FwdAddr
 func (f *FwdAddrSlice) String() string {
 	s := make([]string, 0, 10)
 	for _, fa := range *f {
-		x := fmt.Sprintf("%s://%s:%d-%s:%d",
+		x := fmt.Sprintf("%s://%s-%s",
 			fa.network,
-			net.IP(fa.bind.Addr).String(), fa.bind.Port,
-			net.IP(fa.host.Addr).String(), fa.host.Port)
+			fa.bind.String(),
+			fa.host.String())
 		s = append(s, x)
 	}
 	return strings.Join(s, " ")
@@ -79,8 +79,10 @@ func (f *FwdAddrSlice) Set(value string) error {
 	case "tcppp":
 		fwa.network = "tcp"
 		fwa.proxyProtocol = true
-	default:
+	case "tcp", "udp":
 		fwa.network = network
+	default:
+		return fmt.Errorf("unknown network type %q", network)
 	}
 
 	p = SplitHostPort(rest)
@@ -101,44 +103,25 @@ func (f *FwdAddrSlice) Set(value string) error {
 		hostPort = p[3]
 	}
 
-	if bindIP != "" {
-		ip := netParseOrResolveIP(bindIP)
-		if ip == nil {
-			return fmt.Errorf("Unable to parse IP address %q", bindIP)
-		}
-		if ip.To4() != nil {
-			ip = ip.To4()
-		}
-		fwa.bind.Addr = tcpip.Address(ip)
-	}
-
-	if bindPort != "" {
-		port, err := strconv.ParseUint(bindPort, 10, 16)
+	if bindIP != "" || bindPort != "" {
+		bind, err := ParseDefAddress(bindIP, bindPort)
 		if err != nil {
 			return err
 		}
+		fwa.bind = *bind
+	}
 
+	if bindPort != "" && hostPort == "" {
 		// in case only bindPort is set, and not hostPort, set the default:
-		fwa.bind.Port = uint16(port)
-		fwa.host.Port = uint16(port)
+		hostPort = bindPort
 	}
 
-	if hostIP != "" {
-		ip := netParseOrResolveIP(hostIP)
-		if ip == nil {
-			return fmt.Errorf("Unable to parse IP address %q", hostIP)
-		}
-		if ip.To4() != nil {
-			ip = ip.To4()
-		}
-		fwa.host.Addr = tcpip.Address(ip)
-	}
-	if hostPort != "" {
-		port, err := strconv.ParseUint(hostPort, 10, 16)
+	if hostIP != "" || hostPort != "" {
+		host, err := ParseDefAddress(hostIP, hostPort)
 		if err != nil {
 			return err
 		}
-		fwa.host.Port = uint16(port)
+		fwa.host = *host
 	}
 
 	*f = append(*f, fwa)
@@ -148,27 +131,17 @@ func (f *FwdAddrSlice) Set(value string) error {
 func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, hostAddrDef net.IP) {
 	for i, _ := range *f {
 		fa := &(*f)[i]
-		if fa.bind.Addr == "" {
-			fa.bind.Addr = tcpip.Address(bindAddrDef)
-		}
-		if fa.host.Addr == "" {
-			fa.host.Addr = tcpip.Address(hostAddrDef)
-		}
+		fa.bind.SetDefaultAddr(bindAddrDef)
+		fa.host.SetDefaultAddr(hostAddrDef)
 	}
 }
 
 func (f *FwdAddr) BindAddr() net.Addr {
 	switch f.network {
 	case "tcp":
-		return &net.TCPAddr{
-			IP:   net.IP(f.bind.Addr),
-			Port: int(f.bind.Port),
-		}
+		return f.bind.GetTCPAddr()
 	case "udp":
-		return &net.UDPAddr{
-			IP:   net.IP(f.bind.Addr),
-			Port: int(f.bind.Port),
-		}
+		return f.bind.GetUDPAddr()
 	}
 	return nil
 }
@@ -176,15 +149,9 @@ func (f *FwdAddr) BindAddr() net.Addr {
 func (f *FwdAddr) HostAddr() net.Addr {
 	switch f.network {
 	case "tcp":
-		return &net.TCPAddr{
-			IP:   net.IP(f.host.Addr),
-			Port: int(f.host.Port),
-		}
+		return f.host.GetTCPAddr()
 	case "udp":
-		return &net.UDPAddr{
-			IP:   net.IP(f.host.Addr),
-			Port: int(f.host.Port),
-		}
+		return f.host.GetUDPAddr()
 	}
 	return nil
 }

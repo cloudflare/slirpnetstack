@@ -13,15 +13,8 @@ type Listener interface {
 }
 
 func LocalForwardTCP(state *State, s *stack.Stack, rf FwdAddr, doneChannel <-chan bool) (Listener, error) {
-	tmpBind := &net.TCPAddr{
-		IP:   net.IP(rf.bind.Addr),
-		Port: int(rf.bind.Port),
-	}
-
-	host := &net.TCPAddr{
-		IP:   net.IP(rf.host.Addr),
-		Port: int(rf.host.Port),
-	}
+	tmpBind := rf.bind.GetTCPAddr()
+	host := rf.host.GetTCPAddr()
 
 	srv, err := net.ListenTCP(rf.network, tmpBind)
 	if err != nil {
@@ -57,15 +50,8 @@ func (u *UDPListner) Addr() net.Addr {
 }
 
 func LocalForwardUDP(state *State, s *stack.Stack, rf FwdAddr, doneChannel <-chan bool) (Listener, error) {
-	tmpBind := &net.UDPAddr{
-		IP:   net.IP(rf.bind.Addr),
-		Port: int(rf.bind.Port),
-	}
-
-	targetAddr := &net.UDPAddr{
-		IP:   net.IP(rf.host.Addr),
-		Port: int(rf.host.Port),
-	}
+	tmpBind := rf.bind.GetUDPAddr()
+	targetAddr := rf.host.GetUDPAddr()
 
 	srv, err := net.ListenUDP(rf.network, tmpBind)
 	if err != nil {

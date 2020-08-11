@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"gvisor.dev/gvisor/pkg/tcpip"
 	"net"
+	"strconv"
 )
 
 func IPNetContains(nets []*net.IPNet, ip net.IP) bool {
@@ -53,9 +55,61 @@ func netParseIP(h string) net.IP {
 	return ip
 }
 
+type defAddress struct {
+	static tcpip.FullAddress
+}
+
+func ParseDefAddress(ipS string, portS string) (*defAddress, error) {
+	da := &defAddress{}
+	if ipS != "" {
+		ip := netParseOrResolveIP(ipS)
+		if ip == nil {
+			return nil, fmt.Errorf("Unable to parse IP address %q", ip)
+		}
+		da.static.Addr = tcpip.Address(ip)
+	}
+
+	if portS != "" {
+		var err error
+		port, err := strconv.ParseUint(portS, 10, 16)
+		if err != nil {
+			return nil, err
+		}
+		da.static.Port = uint16(port)
+	}
+	return da, nil
+}
+
+func (da *defAddress) SetDefaultAddr(a net.IP) {
+	if da.static.Addr == "" {
+		da.static.Addr = tcpip.Address(a)
+	}
+}
+
+func (da *defAddress) String() string {
+	return fmt.Sprintf("%s:%d", net.IP(da.static.Addr).String(), da.static.Port)
+}
+
+func (da *defAddress) GetTCPAddr() *net.TCPAddr {
+	return &net.TCPAddr{
+		IP:   net.IP(da.static.Addr),
+		Port: int(da.static.Port),
+	}
+}
+
+func (da *defAddress) GetUDPAddr() *net.UDPAddr {
+	return &net.UDPAddr{
+		IP:   net.IP(da.static.Addr),
+		Port: int(da.static.Port),
+	}
+}
+
 func netParseOrResolveIP(h string) net.IP {
 	ip := netParseIP(h)
 	if ip != nil {
+		if ip.To4() != nil {
+			ip = ip.To4()
+		}
 		return ip
 	}
 	addrs, err := net.LookupHost(h)
