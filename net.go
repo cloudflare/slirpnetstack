@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
-	"gvisor.dev/gvisor/pkg/tcpip"
 	"net"
+	"os"
 	"strconv"
+	"time"
+
+	"gvisor.dev/gvisor/pkg/tcpip"
 )
 
 func IPNetContains(nets []*net.IPNet, ip net.IP) bool {
@@ -55,18 +58,28 @@ func netParseIP(h string) net.IP {
 	return ip
 }
 
+// Deferrred Address. Either just an ip, in which case 'static' is
+// filled and we are done, or something we need to retrieve from DNS.
 type defAddress struct {
-	static tcpip.FullAddress
+	// Static hardcoded IP/port OR previously retrieved one. In
+	// other words it's never empty for a valid address.
+	static    tcpip.FullAddress
+	label     string
+	timestamp time.Time
 }
 
 func ParseDefAddress(ipS string, portS string) (*defAddress, error) {
 	da := &defAddress{}
 	if ipS != "" {
-		ip := netParseOrResolveIP(ipS)
+		ip, resolved := netParseOrResolveIP(ipS)
 		if ip == nil {
 			return nil, fmt.Errorf("Unable to parse IP address %q", ip)
 		}
 		da.static.Addr = tcpip.Address(ip)
+		if resolved {
+			da.label = ipS
+			da.timestamp = time.Now()
+		}
 	}
 
 	if portS != "" {
@@ -77,6 +90,7 @@ func ParseDefAddress(ipS string, portS string) (*defAddress, error) {
 		}
 		da.static.Port = uint16(port)
 	}
+
 	return da, nil
 }
 
@@ -86,11 +100,31 @@ func (da *defAddress) SetDefaultAddr(a net.IP) {
 	}
 }
 
+func (da *defAddress) Retrieve() {
+	if da.label == "" || time.Now().Sub(da.timestamp) <= dnsTTL {
+		return
+	}
+	da.timestamp = time.Now()
+
+	ip, port := FullResolve(da.label)
+	if ip == nil {
+		// Failed to resolve
+		fmt.Fprintf(os.Stderr, "[!] Failed to resolve %q, using stale\n", da.label)
+	} else {
+		da.static.Addr = tcpip.Address(ip)
+		if port != 0 {
+			da.static.Port = uint16(port)
+		}
+	}
+}
+
 func (da *defAddress) String() string {
+	da.Retrieve()
 	return fmt.Sprintf("%s:%d", net.IP(da.static.Addr).String(), da.static.Port)
 }
 
 func (da *defAddress) GetTCPAddr() *net.TCPAddr {
+	da.Retrieve()
 	return &net.TCPAddr{
 		IP:   net.IP(da.static.Addr),
 		Port: int(da.static.Port),
@@ -98,33 +132,39 @@ func (da *defAddress) GetTCPAddr() *net.TCPAddr {
 }
 
 func (da *defAddress) GetUDPAddr() *net.UDPAddr {
+	da.Retrieve()
 	return &net.UDPAddr{
 		IP:   net.IP(da.static.Addr),
 		Port: int(da.static.Port),
 	}
 }
 
-func netParseOrResolveIP(h string) net.IP {
-	ip := netParseIP(h)
-	if ip != nil {
-		if ip.To4() != nil {
-			ip = ip.To4()
-		}
-		return ip
-	}
-	addrs, err := net.LookupHost(h)
+func FullResolve(label string) (net.IP, int) {
+	addrs, err := net.LookupHost(label)
 	if err != nil || len(addrs) < 1 {
-		return nil
+		// On resolution failure, error out
+		return nil, 0
 	}
 
 	// prefer IPv4. No real reason.
 	for _, addr := range addrs {
 		ip := netParseIP(addr)
 		if ip.To4() != nil {
-			return ip.To4()
+			return ip.To4(), 0
 		}
 	}
-	return netParseIP(addrs[0])
+
+	return netParseIP(addrs[0]), 0
+}
+
+func netParseOrResolveIP(h string) (_ip net.IP, _resolved bool) {
+	ip := netParseIP(h)
+	if ip != nil {
+		return ip, false
+	}
+
+	ip, _ = FullResolve(h)
+	return ip, true
 }
 
 func OutboundDial(srcIPs *SrcIPs, dst net.Addr) (net.Conn, error) {

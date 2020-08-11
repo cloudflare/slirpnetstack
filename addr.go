@@ -291,7 +291,7 @@ func (f *IPFlag) String() string {
 }
 
 func (f *IPFlag) Set(value string) error {
-	f.ip = netParseOrResolveIP(value)
+	f.ip, _ = netParseOrResolveIP(value)
 	if f.ip == nil {
 		return fmt.Errorf("Not a valid IP %s", value)
 	}
@@ -381,7 +381,7 @@ func (f *IPPortRangeSlice) Set(commaValue string) error {
 
 		_, ipnet, err := net.ParseCIDR(host)
 		if err != nil {
-			ip := netParseOrResolveIP(host)
+			ip, _ := netParseOrResolveIP(host)
 			if ip == nil {
 				return err
 			}

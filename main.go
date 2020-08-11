@@ -40,6 +40,7 @@ var (
 	sourceIPv6          IPFlag
 	allowRange          IPPortRangeSlice
 	denyRange           IPPortRangeSlice
+	dnsTTL              time.Duration
 )
 
 func init() {
@@ -60,6 +61,7 @@ func init() {
 	flag.Var(&sourceIPv6, "source-ipv6", "When connecting, use the selected Source IP for ipv6")
 	flag.Var(&allowRange, "allow", "When routing, allow specified IP prefix and port range")
 	flag.Var(&denyRange, "deny", "When routing, deny specified IP prefix and port range")
+	flag.DurationVar(&dnsTTL, "dns-ttl", time.Duration(5*time.Second), "For how long to cache DNS in case of dns labels passed to forward target.")
 }
 
 func main() {
