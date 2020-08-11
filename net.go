@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -144,7 +146,40 @@ func (da *defAddress) GetUDPAddr() *net.UDPAddr {
 	}
 }
 
-func FullResolve(label string) (net.IP, int) {
+func FullResolve(label string) (net.IP, uint16) {
+	p := strings.SplitN(label, "@", 2)
+	if len(p) == 2 {
+		label, dnsSrv := p[0], p[1]
+		if !strings.HasPrefix(dnsSrv, "srv-") {
+			return nil, 0
+		}
+		dnsPort, err := strconv.ParseUint(dnsSrv[4:], 10, 16)
+		if err != nil {
+			return nil, 0
+		}
+		dnsSrvAddr := fmt.Sprintf("127.0.0.1:%d", dnsPort)
+		r := &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout: time.Duration(3 * time.Second),
+				}
+				return d.DialContext(ctx, "udp", dnsSrvAddr)
+			},
+		}
+		_, srvAddrs, err := r.LookupSRV(context.Background(), "", "", label)
+		if err != nil || len(srvAddrs) == 0 {
+			return nil, 0
+		}
+		addrs, err := net.LookupHost(srvAddrs[0].Target)
+		if err != nil || len(addrs) < 1 {
+			// On resolution failure, error out
+			return nil, 0
+		}
+		return netParseIP(addrs[0]), srvAddrs[0].Port
+
+	}
+
 	addrs, err := net.LookupHost(label)
 	if err != nil || len(addrs) < 1 {
 		// On resolution failure, error out
