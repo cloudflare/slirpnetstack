@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -61,6 +62,8 @@ func netParseIP(h string) net.IP {
 // Deferrred Address. Either just an ip, in which case 'static' is
 // filled and we are done, or something we need to retrieve from DNS.
 type defAddress struct {
+	sync.Mutex
+
 	// Static hardcoded IP/port OR previously retrieved one. In
 	// other words it's never empty for a valid address.
 	static    tcpip.FullAddress
@@ -101,6 +104,8 @@ func (da *defAddress) SetDefaultAddr(a net.IP) {
 }
 
 func (da *defAddress) Retrieve() {
+	da.Lock()
+	defer da.Unlock()
 	if da.label == "" || time.Now().Sub(da.timestamp) <= dnsTTL {
 		return
 	}
