@@ -139,9 +139,19 @@ func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, hostAddrDef net.IP) {
 func (f *FwdAddr) BindAddr() net.Addr {
 	switch f.network {
 	case "tcp":
-		return f.bind.GetTCPAddr()
+		x := f.bind.GetTCPAddr()
+		if x == nil {
+			// must be explicit nil https://golang.org/doc/faq#nil_error
+			return nil
+		}
+		return x
 	case "udp":
-		return f.bind.GetUDPAddr()
+		x := f.bind.GetUDPAddr()
+		if x == nil {
+			// must be explicit nil https://golang.org/doc/faq#nil_error
+			return nil
+		}
+		return x
 	}
 	return nil
 }
@@ -149,9 +159,19 @@ func (f *FwdAddr) BindAddr() net.Addr {
 func (f *FwdAddr) HostAddr() net.Addr {
 	switch f.network {
 	case "tcp":
-		return f.host.GetTCPAddr()
+		x := f.host.GetTCPAddr()
+		if x == nil {
+			// must be explicit nil https://golang.org/doc/faq#nil_error
+			return nil
+		}
+		return x
 	case "udp":
-		return f.host.GetUDPAddr()
+		x := f.host.GetUDPAddr()
+		if x == nil {
+			// must be explicit nil https://golang.org/doc/faq#nil_error
+			return nil
+		}
+		return x
 	}
 	return nil
 }
@@ -291,9 +311,10 @@ func (f *IPFlag) String() string {
 }
 
 func (f *IPFlag) Set(value string) error {
-	f.ip, _ = netParseOrResolveIP(value)
-	if f.ip == nil {
-		return fmt.Errorf("Not a valid IP %s", value)
+	var err error
+	f.ip, _, err = netParseOrResolveIP(value)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -381,8 +402,8 @@ func (f *IPPortRangeSlice) Set(commaValue string) error {
 
 		_, ipnet, err := net.ParseCIDR(host)
 		if err != nil {
-			ip, _ := netParseOrResolveIP(host)
-			if ip == nil {
+			ip, _, err := netParseOrResolveIP(host)
+			if err != nil {
 				return err
 			}
 			var mask net.IPMask

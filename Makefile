@@ -60,7 +60,8 @@ clean:
 
 GOTESTTARGETS = \
 	bin/mocktcpecho \
-	bin/mockudpecho
+	bin/mockudpecho \
+	bin/mockdns
 
 test: $(GOTESTTARGETS)
 $(GOTESTTARGETS): $(wildcard tests/*/*.go)

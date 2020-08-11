@@ -687,7 +687,7 @@ class RoutingTestSecurity(base.TestCase):
         o = p.stdout_line()
         self.assertFalse(o)
         e = p.stderr_line()
-        self.assertIn('invalid value "notahost" for flag -allow: invalid CIDR address', e)
+        self.assertIn('invalid value "notahost" for flag -allow: lookup notahost ', e)
         p.close()
 
         p = self.prun("--allow=localhost:a")
@@ -711,3 +711,73 @@ class RoutingTestSecurity(base.TestCase):
         self.assertIn('invalid value "localhost:2-1" for flag -allow: min port must be smaller equal than max', e)
         p.close()
 
+    @base.isolateHostNetwork()
+    def test_remote_srv(self):
+        ''' Test -R=tcp://:2222:tcp.echo.server@srv-8600:0 syntax '''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+        dns_port, dns = self.start_dns("tcp.echo.server.=localhost:%d" % echo_tcp_port,
+                                  "udp.echo.server.=localhost:%d" % echo_udp_port)
+        p = self.prun("--disable-routing -dns-ttl=0 -R=tcp://:2222:tcp.echo.server@srv-%d:0 -R=udp://:2222:udp.echo.server@srv-%d:0" % (dns_port, dns_port))
+
+        self.assertStartSync(p)
+        self.assertIn("Accepting", p.stdout_line())
+        self.assertIn("Accepting", p.stdout_line())
+
+        with self.guest_netns():
+            self.assertTcpEcho(port=2222, ip="10.0.2.2")
+            self.assertIn("%s" % echo_tcp_port, p.stdout_line())
+            self.assertIn("%s" % echo_tcp_port, p.stdout_line())
+            self.assertUdpEcho(port=2222, ip="10.0.2.2")
+            self.assertIn("%s" % echo_udp_port, p.stdout_line())
+
+            dns.close()
+            s = utils.connect(port=2222, ip="10.0.2.2")
+            s.close()
+            self.assertIn("dns lookup error", p.stdout_line())
+            s = utils.connect(port=2222, ip="10.0.2.2", udp=True)
+            s.sendall(b"ala")
+            s.close()
+            self.assertIn("dns lookup error" , p.stdout_line())
+
+        self.assertIn("127.0.0.1", tcp_log())
+        self.assertTcpEcho(ip="127.0.0.1", src='127.1.2.4', port=echo_tcp_port)
+        self.assertIn("127.1.2.4", tcp_log())
+
+        self.assertIn("127.0.0.1", udp_log())
+        self.assertUdpEcho(ip="127.0.0.1", src='127.1.2.4', port=echo_udp_port)
+        self.assertIn("127.1.2.4", udp_log())
+
+    @base.isolateHostNetwork()
+    def test_remote_srv_withut_dns(self):
+        '''Test -R=tcp://:2222:tcp.echo.server@srv-8600:0 syntax but when dns
+        server is down. Most importantly - starting the app with dns dwown. '''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+
+        dns_port = 1
+        p = self.prun("--disable-routing -dns-ttl=0 -R=tcp://:2222:tcp.echo.server@srv-%d:0 -R=udp://:2222:udp.echo.server@srv-%d:0" % (dns_port, dns_port))
+
+        self.assertStartSync(p)
+        self.assertIn("Accepting", p.stdout_line())
+        self.assertIn("Accepting", p.stdout_line())
+
+        with self.guest_netns():
+            s = utils.connect(port=2222, ip="10.0.2.2", timeout=0.3)
+            s.close()
+            self.assertIn("10.0.2.2:2222/tcp.echo.server@srv-1-failed remote-fwd dns lookup error", p.stdout_line())
+            s = utils.connect(port=2222, ip="10.0.2.2", udp=True)
+            s.sendall(b"ala")
+            s.close()
+            self.assertIn("10.0.2.2:2222/udp.echo.server@srv-1-failed remote-fwd dns lookup error" , p.stdout_line())
+
+        p.close()
+
+        # but when local binding, this hard fails
+        p = self.prun("--disable-routing -dns-ttl=0 -R=tcp://tcp.echo.server@srv-%d:0::2222" % (dns_port, ))
+        self.assertIn("Joininig", p.stderr_line())
+        self.assertIn("Opening tun ", p.stderr_line())
+        self.assertIn('[!] Failed to resolve bind address "tcp.echo.server@srv-1-failed', p.stderr_line())
+
+        p.close()
+        self.assertEqual(p.rc, 255, "exit code should be 255")

@@ -257,13 +257,18 @@ func Main() int {
 	}
 
 	for i, rf := range remoteFwd {
+		bindAddr := rf.BindAddr()
+		if bindAddr == nil {
+			fmt.Fprintf(os.Stderr, "[!] Failed to resolve bind address %q", rf.bind.String())
+			return -1
+		}
 		fmt.Printf("[+] Accepting on remote side %s://%s\n",
 			rf.network, rf.bind.String())
 		switch rf.network {
 		case "tcp":
-			state.remoteTcpFwd[rf.BindAddr().String()] = &remoteFwd[i]
+			state.remoteTcpFwd[bindAddr.String()] = &remoteFwd[i]
 		case "udp":
-			state.remoteUdpFwd[rf.BindAddr().String()] = &remoteFwd[i]
+			state.remoteUdpFwd[bindAddr.String()] = &remoteFwd[i]
 		}
 	}
 

@@ -18,9 +18,9 @@ SLIRPNETSTACKBIN = os.environ.get('SLIRPNETSTACKBIN')
 DEBUG = bool(os.environ.get('DEBUG'))
 CLONE_NEWNET = 0x40000000
 ORIGINAL_NET_NS = open("/proc/self/ns/net", 'rb')
-MOCKHTTPSERVER  = os.environ.get('MOCKHTTPSERVER', './tests/mockhttpserver/mockhttpserver')
 MOCKUDPECHO  = os.environ.get('MOCKUDPECHO', './bin/mockudpecho')
 MOCKTCPECHO  = os.environ.get('MOCKTCPECHO', './bin/mocktcpecho')
+MOCKDNS      = os.environ.get('MOCKDNS', './bin/mockdns')
 IP_FREEBIND = 15
 
 execno = 0
@@ -209,6 +209,13 @@ class TestCase(unittest.TestCase):
             return echo_port, p.stdout_line
         else:
             return echo_port
+
+    def start_dns(self, *kv):
+        cmd = [MOCKDNS, *kv]
+        p = Process(cmd)
+        dns_port = int(p.stdout_line())
+        self._add_teardown(p)
+        return dns_port, p
 
     def assertUdpEcho(self, *args, **kwargs):
         kwargs['udp'] = True

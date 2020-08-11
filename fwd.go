@@ -15,6 +15,9 @@ type Listener interface {
 func LocalForwardTCP(state *State, s *stack.Stack, rf FwdAddr, doneChannel <-chan bool) (Listener, error) {
 	tmpBind := rf.bind.GetTCPAddr()
 	host := rf.host.GetTCPAddr()
+	if tmpBind == nil || host == nil {
+		return nil, fmt.Errorf("DNS lookup failed")
+	}
 
 	srv, err := net.ListenTCP(rf.network, tmpBind)
 	if err != nil {
@@ -52,6 +55,10 @@ func (u *UDPListner) Addr() net.Addr {
 func LocalForwardUDP(state *State, s *stack.Stack, rf FwdAddr, doneChannel <-chan bool) (Listener, error) {
 	tmpBind := rf.bind.GetUDPAddr()
 	targetAddr := rf.host.GetUDPAddr()
+
+	if tmpBind == nil || targetAddr == nil {
+		return nil, fmt.Errorf("DNS lookup failed")
+	}
 
 	srv, err := net.ListenUDP(rf.network, tmpBind)
 	if err != nil {

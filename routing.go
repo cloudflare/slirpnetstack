@@ -171,7 +171,16 @@ func RoutingForward(guest KaConn, srcIPs *SrcIPs, loc net.Addr) {
 
 func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
 	var pe ProxyError
-	xhost, err := OutboundDial(srcIPs, rf.HostAddr())
+	hostAddr := rf.HostAddr()
+	if hostAddr == nil {
+		fmt.Printf("[!] %s://%s-%s/%s remote-fwd dns lookup error\n",
+			rf.network,
+			guest.RemoteAddr(),
+			guest.LocalAddr(),
+			rf.host.String())
+		return
+	}
+	xhost, err := OutboundDial(srcIPs, hostAddr)
 	if err != nil {
 		SetResetOnClose(guest)
 		guest.Close()
@@ -182,7 +191,7 @@ func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
 				rf.network,
 				guest.RemoteAddr(),
 				guest.LocalAddr(),
-				rf.HostAddr(),
+				rf.host.String(),
 				pe)
 		}
 	} else {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -68,23 +67,16 @@ type defAddress struct {
 
 	// Static hardcoded IP/port OR previously retrieved one. In
 	// other words it's never empty for a valid address.
-	static    tcpip.FullAddress
-	label     string
-	timestamp time.Time
+	static  tcpip.FullAddress
+	label   string
+	fetched time.Time
+	error   error
 }
 
-func ParseDefAddress(ipS string, portS string) (*defAddress, error) {
+func ParseDefAddress(ipS string, portS string) (_da *defAddress, _err error) {
 	da := &defAddress{}
 	if ipS != "" {
-		ip, resolved := netParseOrResolveIP(ipS)
-		if ip == nil {
-			return nil, fmt.Errorf("Unable to parse IP address %q", ip)
-		}
-		da.static.Addr = tcpip.Address(ip)
-		if resolved {
-			da.label = ipS
-			da.timestamp = time.Now()
-		}
+		da.label = ipS
 	}
 
 	if portS != "" {
@@ -105,57 +97,71 @@ func (da *defAddress) SetDefaultAddr(a net.IP) {
 	}
 }
 
-func (da *defAddress) Retrieve() {
+func (da *defAddress) Retrieve() *tcpip.FullAddress {
 	da.Lock()
 	defer da.Unlock()
-	if da.label == "" || time.Now().Sub(da.timestamp) <= dnsTTL {
-		return
+	if da.label == "" || time.Now().Sub(da.fetched) <= dnsTTL {
+		return &da.static
 	}
-	da.timestamp = time.Now()
+	da.fetched = time.Now()
 
-	ip, port := FullResolve(da.label)
-	if ip == nil {
+	ip, port, err := FullResolve(da.label)
+	if err != nil {
 		// Failed to resolve
-		fmt.Fprintf(os.Stderr, "[!] Failed to resolve %q, using stale\n", da.label)
+		da.error = err
+		return nil
 	} else {
 		da.static.Addr = tcpip.Address(ip)
 		if port != 0 {
 			da.static.Port = uint16(port)
 		}
+		da.error = nil
 	}
+	return &da.static
 }
 
 func (da *defAddress) String() string {
-	da.Retrieve()
+	static := da.Retrieve()
+	if static == nil {
+		return fmt.Sprintf("%s-failed", da.label)
+	}
 	return fmt.Sprintf("%s:%d", net.IP(da.static.Addr).String(), da.static.Port)
 }
 
 func (da *defAddress) GetTCPAddr() *net.TCPAddr {
-	da.Retrieve()
+	static := da.Retrieve()
+	if static == nil {
+		return nil
+	}
+
 	return &net.TCPAddr{
-		IP:   net.IP(da.static.Addr),
-		Port: int(da.static.Port),
+		IP:   net.IP(static.Addr),
+		Port: int(static.Port),
 	}
 }
 
 func (da *defAddress) GetUDPAddr() *net.UDPAddr {
-	da.Retrieve()
+	static := da.Retrieve()
+	if static == nil {
+		return nil
+	}
+
 	return &net.UDPAddr{
-		IP:   net.IP(da.static.Addr),
-		Port: int(da.static.Port),
+		IP:   net.IP(static.Addr),
+		Port: int(static.Port),
 	}
 }
 
-func FullResolve(label string) (net.IP, uint16) {
+func FullResolve(label string) (net.IP, uint16, error) {
 	p := strings.SplitN(label, "@", 2)
 	if len(p) == 2 {
 		label, dnsSrv := p[0], p[1]
 		if !strings.HasPrefix(dnsSrv, "srv-") {
-			return nil, 0
+			return nil, 0, fmt.Errorf("Unknown dns type %q", dnsSrv)
 		}
 		dnsPort, err := strconv.ParseUint(dnsSrv[4:], 10, 16)
 		if err != nil {
-			return nil, 0
+			return nil, 0, fmt.Errorf("Cant parse dns server port %q", dnsSrv[4:])
 		}
 		dnsSrvAddr := fmt.Sprintf("127.0.0.1:%d", dnsPort)
 		r := &net.Resolver{
@@ -169,42 +175,53 @@ func FullResolve(label string) (net.IP, uint16) {
 		}
 		_, srvAddrs, err := r.LookupSRV(context.Background(), "", "", label)
 		if err != nil || len(srvAddrs) == 0 {
-			return nil, 0
+			return nil, 0, fmt.Errorf("Failed to lookup SRV %q on %q", label, dnsSrvAddr)
 		}
 		addrs, err := net.LookupHost(srvAddrs[0].Target)
 		if err != nil || len(addrs) < 1 {
 			// On resolution failure, error out
-			return nil, 0
+			return nil, 0, fmt.Errorf("Failed to resolve %q using system resolver", srvAddrs[0].Target)
 		}
-		return netParseIP(addrs[0]), srvAddrs[0].Port
+		ip := netParseIP(addrs[0])
+		if ip == nil {
+			return nil, 0, fmt.Errorf("No received addrs from system resolver on %q", srvAddrs[0].Target)
+		}
+		return ip, srvAddrs[0].Port, nil
 
 	}
 
 	addrs, err := net.LookupHost(label)
-	if err != nil || len(addrs) < 1 {
+	if err != nil {
 		// On resolution failure, error out
-		return nil, 0
+		return nil, 0, err
+	}
+	if len(addrs) < 1 {
+		return nil, 0, fmt.Errorf("Empty dns reponse for %q", label)
 	}
 
 	// prefer IPv4. No real reason.
 	for _, addr := range addrs {
 		ip := netParseIP(addr)
 		if ip.To4() != nil {
-			return ip.To4(), 0
+			return ip.To4(), 0, nil
 		}
 	}
 
-	return netParseIP(addrs[0]), 0
+	ip := netParseIP(addrs[0])
+	if ip == nil {
+		return nil, 0, fmt.Errorf("Empty dns reponse for %q", label)
+	}
+	return ip, 0, nil
 }
 
-func netParseOrResolveIP(h string) (_ip net.IP, _resolved bool) {
+func netParseOrResolveIP(h string) (_ip net.IP, _resolved bool, _err error) {
 	ip := netParseIP(h)
 	if ip != nil {
-		return ip, false
+		return ip, false, nil
 	}
 
-	ip, _ = FullResolve(h)
-	return ip, true
+	ip, _, err := FullResolve(h)
+	return ip, true, err
 }
 
 func OutboundDial(srcIPs *SrcIPs, dst net.Addr) (net.Conn, error) {
