@@ -172,3 +172,24 @@ for specific IP prefixes and port ranges. For example, in case of --disable-rout
 Would allow connectivity to any IP in the given 192.168.1.0/24 network
 prefix and in the port range of 53-53 ports (one port in this case)
 over protocol UDP. `--allow` takes precedence over `--deny`.
+
+Development
+-----------
+
+You can run tests with:
+
+    make tests
+
+Or tests with code coverage
+
+    make cover
+
+You can get HTML report with
+
+    make cover HTML=1
+
+Finally, to run standalone test:
+
+    SLIRPNETSTACKBIN=./bin/slirpnetstack \
+        unshare -Ur \
+        python3 -m unittest tests.test_basic.RoutingTestSecurity.test_remote_srv

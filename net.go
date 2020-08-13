@@ -177,7 +177,15 @@ func FullResolve(label string) (net.IP, uint16, error) {
 		if err != nil || len(srvAddrs) == 0 {
 			return nil, 0, fmt.Errorf("Failed to lookup SRV %q on %q", label, dnsSrvAddr)
 		}
-		addrs, err := net.LookupHost(srvAddrs[0].Target)
+
+		// For effective resolution, allowing to utilize
+		// /etc/hosts, trim the trailing dot if present.
+		serviceLabel := srvAddrs[0].Target
+		if strings.HasSuffix(serviceLabel, ".") {
+			serviceLabel = serviceLabel[:len(serviceLabel)-1]
+		}
+
+		addrs, err := net.LookupHost(serviceLabel)
 		if err != nil || len(addrs) < 1 {
 			// On resolution failure, error out
 			return nil, 0, fmt.Errorf("Failed to resolve %q using system resolver", srvAddrs[0].Target)

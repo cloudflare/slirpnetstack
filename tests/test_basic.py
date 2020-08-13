@@ -683,11 +683,13 @@ class RoutingTestSecurity(base.TestCase):
         self.assertIn("192.168.1.100", tcp_log())
         p.close()
 
-        p = self.prun("--allow=notahost")
-        o = p.stdout_line()
-        self.assertFalse(o)
+        # Make it not a valid DNS label, to allow dns to fail
+        # quick. Otherwise the thing will stall for > 20s on DNS
+        # resolution. Remember we don't have access to host resolver
+        # from the isolateHostNetwork test.
+        p = self.prun("--allow=notahostó")
         e = p.stderr_line()
-        self.assertIn('invalid value "notahost" for flag -allow: lookup notahost ', e)
+        self.assertIn('invalid value "notahostó" for flag -allow: lookup notahostó', e)
         p.close()
 
         p = self.prun("--allow=localhost:a")
