@@ -137,7 +137,7 @@ class RoutingTest(base.TestCase):
         ''' Test tcp routing. Establish connection from guest onto an IP
         assigned to local-scoped IP on host. '''
         echo_port = self.start_tcp_echo()
-        p = self.prun("")
+        p = self.prun("-enable-host")
         self.assertStartSync(p)
         with self.guest_netns():
             self.assertTcpEcho(ip="192.168.1.100", port=echo_port)
@@ -151,7 +151,7 @@ class RoutingTest(base.TestCase):
         ''' Test tcp routing. Establish connection from guest onto an IP
         assigned to local-scoped IP on host. '''
         echo_port = self.start_tcp_echo()
-        p = self.prun("")
+        p = self.prun("-enable-host")
         self.assertStartSync(p)
         with self.guest_netns():
             self.assertTcpEcho(ip="3ffe::100", port=echo_port)
@@ -164,7 +164,7 @@ class RoutingTest(base.TestCase):
     def test_tcp_routing_multi(self):
         ''' Test tcp routing. Can we establish like 200 connnections? '''
         echo_port = self.start_tcp_echo()
-        p = self.prun("")
+        p = self.prun("-enable-host")
         self.assertStartSync(p)
         c = 0
         with self.guest_netns():
@@ -185,7 +185,7 @@ class RoutingTest(base.TestCase):
         echo_port = self.start_udp_echo()
         self.assertUdpEcho(port=echo_port, ip="192.168.1.100")
 
-        p = self.prun("")
+        p = self.prun("-enable-host")
         self.assertStartSync(p)
         with self.guest_netns():
             self.assertUdpEcho(port=echo_port, ip="192.168.1.100")
@@ -200,7 +200,7 @@ class RoutingTest(base.TestCase):
         echo_port = self.start_udp_echo()
         self.assertUdpEcho(port=echo_port, ip="192.168.1.100")
 
-        p = self.prun("")
+        p = self.prun("-enable-host")
         self.assertStartSync(p)
         with self.guest_netns():
             s = utils.connect(port=echo_port, ip="192.168.1.100", udp=True)
@@ -227,7 +227,7 @@ class GenericForwardingTest(base.TestCase):
     def test_fwd_parsing_two(self):
         '''Test basic forwarding parsing, port and host'''
         echo_port = 1235
-        p = self.prun("-R 1.2.3.4:%s" % echo_port)
+        p = self.prun("-enable-host -R 1.2.3.4:%s" % echo_port)
         self.assertStartSync(p)
         port = self.assertListenLine(p, "Accepting on remote side tcp://1.2.3.4")
         self.assertEqual(port, echo_port)
@@ -551,7 +551,7 @@ class RoutingTestSecurity(base.TestCase):
         ''' Test tcp routing security, specifically --disable-host-networks option. '''
         echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
-        p = self.prun("--disable-host-networks")
+        p = self.prun("")
         self.assertStartSync(p)
         with self.guest_netns():
             for dst in ("192.168.1.100", "3ffe::100"):
@@ -570,11 +570,11 @@ class RoutingTestSecurity(base.TestCase):
 
     @base.isolateHostNetwork()
     def test_disabe_routing(self):
-        ''' Test tcp routing security, specifically --disable-routing
-        option. This test is the same as test above. '''
+        '''Test tcp routing security, specifically by default routing should
+        be disabled.  This test is the same as test above.'''
         echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
-        p = self.prun("--disable-routing")
+        p = self.prun("")
         self.assertStartSync(p)
         with self.guest_netns():
             for dst in ("192.168.1.100", "3ffe::100"):
@@ -596,7 +596,7 @@ class RoutingTestSecurity(base.TestCase):
         ''' Test --source-ipv4 option'''
         echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
-        p = self.prun("--source-ipv4=127.4.3.2")
+        p = self.prun("--enable-host --source-ipv4=127.4.3.2")
         self.assertStartSync(p)
         with self.guest_netns():
             self.assertTcpEcho(ip="192.168.1.100", port=echo_tcp_port)
@@ -613,7 +613,7 @@ class RoutingTestSecurity(base.TestCase):
         ''' Test --source-ipv6 option'''
         echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
-        p = self.prun("--source-ipv6=::1")
+        p = self.prun("-enable-host -source-ipv6=::1")
         self.assertStartSync(p)
         with self.guest_netns():
             self.assertTcpEcho(ip="3ffe::100", port=echo_tcp_port)
@@ -630,10 +630,10 @@ class RoutingTestSecurity(base.TestCase):
 
     @base.isolateHostNetwork()
     def test_allow_range_all_ports(self):
-        ''' Test --allow and --deny with --disable-routing - all ports'''
+        ''' Test --allow and --deny with disabled routing - all ports'''
         echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
-        p = self.prun("--disable-routing --allow=tcp://192.168.1.100,udp://192.168.1.100,tcp://[3ffe::100],udp://[3ffe::100] --deny=tcp://192.168.1.100,tcp://[3ffe::100]")
+        p = self.prun("--allow=tcp://192.168.1.100,udp://192.168.1.100,tcp://[3ffe::100],udp://[3ffe::100] --deny=tcp://192.168.1.100,tcp://[3ffe::100]")
         self.assertStartSync(p)
         with self.guest_netns():
             for dst in ("192.168.1.100", "3ffe::100"):
@@ -653,7 +653,7 @@ class RoutingTestSecurity(base.TestCase):
         ''' Test --allow and --deny with --disable-routing - some ports '''
         echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
-        p = self.prun("--allow=udp://192.168.1.100:100-200 --allow=tcp://192.168.1.100:100-200 --deny=tcp://192.168.1.100:%d,tcp://[3ffe::100]:%d-%d" % (
+        p = self.prun("--enable-host --allow=udp://192.168.1.100:100-200 --allow=tcp://192.168.1.100:100-200 --deny=tcp://192.168.1.100:%d,tcp://[3ffe::100]:%d-%d" % (
             echo_tcp_port, echo_tcp_port, echo_tcp_port))
         self.assertStartSync(p)
         with self.guest_netns():
@@ -674,7 +674,7 @@ class RoutingTestSecurity(base.TestCase):
         ''' Test --allow parsing corner cases '''
         echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
-        p = self.prun("--disable-routing --allow=192.168.1.100:%d" % (echo_tcp_port,))
+        p = self.prun("--allow=192.168.1.100:%d" % (echo_tcp_port,))
         self.assertStartSync(p)
         with self.guest_netns():
             self.assertTcpEcho(port=echo_tcp_port, ip="192.168.1.100")
@@ -718,7 +718,7 @@ class RoutingTestSecurity(base.TestCase):
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
         dns_port, dns = self.start_dns("tcp.echo.server.=localhost:%d" % echo_tcp_port,
                                   "udp.echo.server.=localhost:%d" % echo_udp_port)
-        p = self.prun("--disable-routing -dns-ttl=0 -R=tcp://:2222:tcp.echo.server@srv-%d:0 -R=udp://:2222:udp.echo.server@srv-%d:0" % (dns_port, dns_port))
+        p = self.prun("-dns-ttl=0 -R=tcp://:2222:tcp.echo.server@srv-%d:0 -R=udp://:2222:udp.echo.server@srv-%d:0" % (dns_port, dns_port))
 
         self.assertStartSync(p)
         self.assertIn("Accepting", p.stdout_line())
@@ -756,7 +756,7 @@ class RoutingTestSecurity(base.TestCase):
         echo_udp_port, udp_log = self.start_udp_echo(log=True)
 
         dns_port = 1
-        p = self.prun("--disable-routing -dns-ttl=0 -R=tcp://:2222:tcp.echo.server@srv-%d:0 -R=udp://:2222:udp.echo.server@srv-%d:0" % (dns_port, dns_port))
+        p = self.prun("-dns-ttl=0 -R=tcp://:2222:tcp.echo.server@srv-%d:0 -R=udp://:2222:udp.echo.server@srv-%d:0" % (dns_port, dns_port))
 
         self.assertStartSync(p)
         self.assertIn("Accepting", p.stdout_line())
@@ -774,7 +774,7 @@ class RoutingTestSecurity(base.TestCase):
         p.close()
 
         # but when local binding, this hard fails
-        p = self.prun("--disable-routing -dns-ttl=0 -R=tcp://tcp.echo.server@srv-%d:0::2222" % (dns_port, ))
+        p = self.prun("-dns-ttl=0 -R=tcp://tcp.echo.server@srv-%d:0::2222" % (dns_port, ))
         self.assertIn("Joininig", p.stderr_line())
         self.assertIn("Opening tun ", p.stderr_line())
         self.assertIn('[!] Failed to resolve bind address "tcp.echo.server@srv-1-failed', p.stderr_line())

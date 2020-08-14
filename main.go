@@ -22,25 +22,25 @@ import (
 )
 
 var (
-	fd                  int
-	netNsPath           string
-	ifName              string
-	mtu                 uint
-	remoteFwd           FwdAddrSlice
-	localFwd            FwdAddrSlice
-	logConnections      bool
-	quiet               bool
-	metricAddr          AddrFlags
-	gomaxprocs          int
-	pcapPath            string
-	exitWithParent      bool
-	disableHostNetworks bool
-	disableRouting      bool
-	sourceIPv4          IPFlag
-	sourceIPv6          IPFlag
-	allowRange          IPPortRangeSlice
-	denyRange           IPPortRangeSlice
-	dnsTTL              time.Duration
+	fd                    int
+	netNsPath             string
+	ifName                string
+	mtu                   uint
+	remoteFwd             FwdAddrSlice
+	localFwd              FwdAddrSlice
+	logConnections        bool
+	quiet                 bool
+	metricAddr            AddrFlags
+	gomaxprocs            int
+	pcapPath              string
+	exitWithParent        bool
+	enableHostRouting     bool
+	enableInternetRouting bool
+	sourceIPv4            IPFlag
+	sourceIPv6            IPFlag
+	allowRange            IPPortRangeSlice
+	denyRange             IPPortRangeSlice
+	dnsTTL                time.Duration
 )
 
 func init() {
@@ -55,8 +55,8 @@ func init() {
 	flag.IntVar(&gomaxprocs, "maxprocs", 0, "set GOMAXPROCS variable to limit cpu")
 	flag.StringVar(&pcapPath, "pcap", "", "path to PCAP file")
 	flag.BoolVar(&exitWithParent, "exit-with-parent", false, "Exit with parent process")
-	flag.BoolVar(&disableHostNetworks, "disable-host-networks", false, "Prevent guest from connecting to IP's that are in host main and local routing tables")
-	flag.BoolVar(&disableRouting, "disable-routing", false, "Prevent guest from connecting anywhere. Inbound traffic via local forwarding still works")
+	flag.BoolVar(&enableHostRouting, "enable-host", false, "Allow guest to connecting to IP's that are in the host main and local routing tables")
+	flag.BoolVar(&enableInternetRouting, "enable-routing", false, "Allow guest connecting to non-local IP's that are likley to be routed to the internet")
 	flag.Var(&sourceIPv4, "source-ipv4", "When connecting, use the selected Source IP for ipv4")
 	flag.Var(&sourceIPv6, "source-ipv6", "When connecting, use the selected Source IP for ipv6")
 	flag.Var(&allowRange, "allow", "When routing, allow specified IP prefix and port range")
@@ -75,16 +75,17 @@ type SrcIPs struct {
 }
 
 type State struct {
-	RoutingDeny []*net.IPNet
+	StaticRoutingDeny []*net.IPNet
 
 	remoteUdpFwd map[string]*FwdAddr
 	remoteTcpFwd map[string]*FwdAddr
 
 	// disable host routes
-	denyLocalRoutes *LocalRoutes
-	disableRouting  bool
-	allowRange      IPPortRangeSlice
-	denyRange       IPPortRangeSlice
+	localRoutes           *LocalRoutes
+	enableHostRouting     bool
+	enableInternetRouting bool
+	allowRange            IPPortRangeSlice
+	denyRange             IPPortRangeSlice
 
 	srcIPs SrcIPs
 }
@@ -121,12 +122,11 @@ func Main() int {
 		runtime.GOMAXPROCS(gomaxprocs)
 	}
 
-	if disableHostNetworks {
-		state.denyLocalRoutes = &LocalRoutes{}
-		state.denyLocalRoutes.Start(30 * time.Second)
-	}
+	state.localRoutes = &LocalRoutes{}
+	state.localRoutes.Start(30 * time.Second)
 
-	state.disableRouting = disableRouting
+	state.enableHostRouting = enableHostRouting
+	state.enableInternetRouting = enableInternetRouting
 	state.srcIPs.srcIPv4 = sourceIPv4.ip
 	state.srcIPs.srcIPv6 = sourceIPv6.ip
 	state.allowRange = allowRange
@@ -147,7 +147,7 @@ func Main() int {
 	// https://idea.popcount.org/2019-12-06-addressing/ The idea
 	// here is to forbid outbound connections to obviously wrong
 	// or meaningless IP's.
-	state.RoutingDeny = append(state.RoutingDeny,
+	state.StaticRoutingDeny = append(state.StaticRoutingDeny,
 		MustParseCIDR("0.0.0.0/8"),
 		MustParseCIDR("10.0.2.0/24"),
 		MustParseCIDR("127.0.0.0/8"),
@@ -303,8 +303,8 @@ stop:
 	if metrics != nil {
 		metrics.Close()
 	}
-	if state.denyLocalRoutes != nil {
-		state.denyLocalRoutes.Stop()
+	if state.localRoutes != nil {
+		state.localRoutes.Stop()
 	}
 	return 0
 }

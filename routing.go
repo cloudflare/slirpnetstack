@@ -22,22 +22,18 @@ func FirewallRoutingBlock(state *State, addr net.Addr) (_block bool) {
 	}
 
 	addrIP := netAddrIP(addr)
-	if IPNetContains(state.RoutingDeny, addrIP) {
+	// Is the IP on hard deny list?
+	if IPNetContains(state.StaticRoutingDeny, addrIP) {
 		// Firewall deny
 		return true
 	}
 
-	if state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(addrIP) {
-		// Firewall deny
-		return true
+	// Is the ip in local routes?
+	if state.localRoutes.Contains(addrIP) {
+		return !state.enableHostRouting
 	}
 
-	if state.disableRouting {
-		// Firewall deny
-		return true
-	}
-
-	return false
+	return !state.enableInternetRouting
 }
 
 func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest) {

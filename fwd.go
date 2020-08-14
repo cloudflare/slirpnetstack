@@ -142,12 +142,12 @@ func LocalForward(state *State, s *stack.Stack, conn KaConn, targetAddr net.Addr
 			// 127.0.0.1)... well... spoof it! The client might find it
 			// useful who launched the connection in the first place.
 			raddr := conn.RemoteAddr()
-			if IPNetContains(state.RoutingDeny, netAddrIP(raddr)) == false {
+			if IPNetContains(state.StaticRoutingDeny, netAddrIP(raddr)) == false {
 				srcIP = raddr
 			}
 		} else {
 			ppPrefix = "PP "
-			if IPNetContains(state.RoutingDeny, netAddrIP(ppSrc)) == false {
+			if IPNetContains(state.StaticRoutingDeny, netAddrIP(ppSrc)) == false {
 				srcIP = ppSrc
 			} else {
 				// If the source IP as reported by PP
