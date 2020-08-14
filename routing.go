@@ -12,32 +12,32 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 )
 
-func FirewallRoutingBlock(state *State, addr net.Addr) (_block bool, _rst bool) {
+func FirewallRoutingBlock(state *State, addr net.Addr) (_block bool) {
 	if state.denyRange.Contains(addr) {
-		return true, true
+		return true
 	}
 
 	if state.allowRange.Contains(addr) {
-		return false, false
+		return false
 	}
 
 	addrIP := netAddrIP(addr)
 	if IPNetContains(state.RoutingDeny, addrIP) {
 		// Firewall deny
-		return true, true
+		return true
 	}
 
 	if state.denyLocalRoutes != nil && state.denyLocalRoutes.Contains(addrIP) {
 		// Firewall deny
-		return true, false
+		return true
 	}
 
 	if state.disableRouting {
 		// Firewall deny
-		return true, false
+		return true
 	}
 
-	return false, false
+	return false
 }
 
 func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest) {
@@ -60,7 +60,7 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 
 		rf, ok := state.remoteUdpFwd[loc.String()]
 		if ok == false {
-			if block, _ := FirewallRoutingBlock(state, loc); block {
+			if block := FirewallRoutingBlock(state, loc); block {
 				ep.Close()
 				return
 			}
@@ -94,8 +94,17 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 
 		rf, ok := state.remoteTcpFwd[loc.String()]
 		if ok == false {
-			if block, rst := FirewallRoutingBlock(state, loc); block {
-				r.Complete(rst)
+			if block := FirewallRoutingBlock(state, loc); block {
+				// In theory we could pass a bit of
+				// data to the guest here. Like:
+				// blocked on firewall - never send
+				// RST, end host is failing - always
+				// send RST. But this is wrong. If on
+				// firewall we know the end host is
+				// unreachable - just tell the guest.
+				// Maybe we could use parametrized
+				// ICMP / RST in future.
+				r.Complete(true)
 				return
 			}
 		}

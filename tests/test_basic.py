@@ -555,8 +555,7 @@ class RoutingTestSecurity(base.TestCase):
         self.assertStartSync(p)
         with self.guest_netns():
             for dst in ("192.168.1.100", "3ffe::100"):
-                with self.assertRaises(socket.timeout):
-                    utils.connect(port=echo_tcp_port, ip=dst, timeout=0.3)
+                self.assertTcpRefusedError(port=echo_tcp_port, ip=dst)
                 s = utils.connect(port=echo_udp_port, ip=dst, udp=True)
                 s.sendall(b"ala")
                 s.close()
@@ -579,8 +578,7 @@ class RoutingTestSecurity(base.TestCase):
         self.assertStartSync(p)
         with self.guest_netns():
             for dst in ("192.168.1.100", "3ffe::100"):
-                with self.assertRaises(socket.timeout):
-                    utils.connect(port=echo_tcp_port, ip=dst, timeout=0.3)
+                self.assertTcpRefusedError(port=echo_tcp_port, ip=dst)
                 s = utils.connect(port=echo_udp_port, ip=dst, udp=True)
                 s.sendall(b"ala")
                 s.close()
