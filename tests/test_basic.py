@@ -101,7 +101,7 @@ class BasicTest(base.TestCase):
         # [!] Failed to listen on udp://127.0.0.1:45295
         self.assertIn("Failed to listen on udp://127.0.0.1", p.stderr_line())
         p.close()
-        self.assertEqual(p.rc, 255, "exit code should be 255")
+        self.assertEqual(p.rc, 247, "exit code should be 247")
 
     def test_basic_ping6(self):
         '''Due to how netstack is configured, we will answer to ping against
@@ -782,4 +782,4 @@ class RoutingTestSecurity(base.TestCase):
         self.assertIn('[!] Failed to resolve bind address "tcp.echo.server@srv-1-failed', p.stderr_line())
 
         p.close()
-        self.assertEqual(p.rc, 255, "exit code should be 255")
+        self.assertEqual(p.rc, 246, "exit code should be 246")

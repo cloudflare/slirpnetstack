@@ -89,11 +89,6 @@ type State struct {
 	srcIPs SrcIPs
 }
 
-func failNow(message string) {
-	fmt.Fprintln(os.Stderr, message)
-	os.Exit(-1)
-}
-
 func Main() int {
 	var (
 		state   State
@@ -178,11 +173,13 @@ func Main() int {
 	if fd == -1 {
 		fd, tapMode, mtu, err = GetTunTap(netNsPath, ifName)
 		if err != nil {
-			failNow(fmt.Sprintf("Failed to open TUN/TAP: %s", err))
+			fmt.Fprintf(os.Stderr, "Failed to open TUN/TAP: %s", err)
+			return -3
 		}
 	} else {
 		if netNsPath != "" {
-			failNow("Please specify either -fd or -netns")
+			fmt.Fprintf(os.Stderr, "Please specify either -fd or -netns")
+			return -4
 		}
 		if mtu == 0 {
 			mtu = 1500
@@ -206,22 +203,26 @@ func Main() int {
 	s := NewStack(bufSize, bufSize)
 
 	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu)); err != nil {
-		failNow(fmt.Sprintf("Failed to create linkEP: %s", err))
+		fmt.Fprintf(os.Stderr, "[!] Failed to create linkEP: %s", err)
+		return -5
 	}
 
 	if pcapPath != "" {
 		pcapFile, err := os.OpenFile(pcapPath, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
-			failNow(fmt.Sprintf("Failed to open PCAP file: %s", err))
+			fmt.Fprintf(os.Stderr, "[!] Failed to open PCAP file: %s", err)
+			return -6
 		}
 		if linkEP, err = sniffer.NewWithWriter(linkEP, pcapFile, uint32(mtu)); err != nil {
-			failNow(fmt.Sprintf("Failed to sniff linkEP: %s", err))
+			fmt.Fprintf(os.Stderr, "[!]Failed to sniff linkEP: %s", err)
+			return -7
 		}
 		defer pcapFile.Close()
 	}
 
 	if err = createNIC(s, 1, linkEP); err != nil {
-		failNow(fmt.Sprintf("Failed to createNIC: %s", err))
+		fmt.Fprintf(os.Stderr, "[!] Failed to createNIC: %s", err)
+		return -8
 
 	}
 
@@ -241,8 +242,9 @@ func Main() int {
 			srv, err = LocalForwardUDP(&state, s, lf, doneChannel)
 		}
 		if err != nil {
-			failNow(fmt.Sprintf("[!] Failed to listen on %s://%s: %s\n",
-				lf.network, lf.bind.String(), err))
+			fmt.Fprintf(os.Stderr, "[!] Failed to listen on %s://%s: %s\n",
+				lf.network, lf.bind.String(), err)
+			return -9
 		} else {
 			ppPrefix := ""
 			if lf.proxyProtocol {
@@ -260,7 +262,7 @@ func Main() int {
 		bindAddr := rf.BindAddr()
 		if bindAddr == nil {
 			fmt.Fprintf(os.Stderr, "[!] Failed to resolve bind address %q", rf.bind.String())
-			return -1
+			return -10
 		}
 		fmt.Printf("[+] Accepting on remote side %s://%s\n",
 			rf.network, rf.bind.String())
