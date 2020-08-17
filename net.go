@@ -152,10 +152,36 @@ func (da *defAddress) GetUDPAddr() *net.UDPAddr {
 	}
 }
 
+func simpleLookupHost(resolver *net.Resolver, label string) (net.IP, error) {
+	addrs, err := resolver.LookupHost(context.Background(), label)
+	if err != nil {
+		// On resolution failure, error out
+		return nil, err
+	}
+	if len(addrs) < 1 {
+		return nil, fmt.Errorf("Empty dns reponse for %q", label)
+	}
+
+	// prefer IPv4. No real reason.
+	for _, addr := range addrs {
+		ip := netParseIP(addr)
+		if ip.To4() != nil {
+			return ip.To4(), nil
+		}
+	}
+
+	ip := netParseIP(addrs[0])
+	if ip == nil {
+		return nil, fmt.Errorf("Empty dns reponse for %q", label)
+	}
+	return ip, nil
+}
+
 func FullResolve(label string) (net.IP, uint16, error) {
+	port := uint16(0)
 	p := strings.SplitN(label, "@", 2)
 	if len(p) == 2 {
-		label, dnsSrv := p[0], p[1]
+		srvQuery, dnsSrv := p[0], p[1]
 		if !strings.HasPrefix(dnsSrv, "srv-") {
 			return nil, 0, fmt.Errorf("Unknown dns type %q", dnsSrv)
 		}
@@ -173,53 +199,34 @@ func FullResolve(label string) (net.IP, uint16, error) {
 				return d.DialContext(ctx, "udp", dnsSrvAddr)
 			},
 		}
-		_, srvAddrs, err := r.LookupSRV(context.Background(), "", "", label)
+		_, srvAddrs, err := r.LookupSRV(context.Background(), "", "", srvQuery)
 		if err != nil || len(srvAddrs) == 0 {
-			return nil, 0, fmt.Errorf("Failed to lookup SRV %q on %q", label, dnsSrvAddr)
+			return nil, 0, fmt.Errorf("Failed to lookup SRV %q on %q", srvQuery, dnsSrvAddr)
 		}
 
 		// For effective resolution, allowing to utilize
 		// /etc/hosts, trim the trailing dot if present.
 		serviceLabel := srvAddrs[0].Target
+		servicePort := srvAddrs[0].Port
 		if strings.HasSuffix(serviceLabel, ".") {
 			serviceLabel = serviceLabel[:len(serviceLabel)-1]
 		}
 
-		addrs, err := net.LookupHost(serviceLabel)
-		if err != nil || len(addrs) < 1 {
-			// On resolution failure, error out
-			return nil, 0, fmt.Errorf("Failed to resolve %q using system resolver", srvAddrs[0].Target)
+		ip, err := simpleLookupHost(r, serviceLabel)
+		if err == nil && ip != nil {
+			return ip, servicePort, nil
 		}
-		ip := netParseIP(addrs[0])
-		if ip == nil {
-			return nil, 0, fmt.Errorf("No received addrs from system resolver on %q", srvAddrs[0].Target)
-		}
-		return ip, srvAddrs[0].Port, nil
 
+		// Fallthrough and try the OS resolver
+		label = serviceLabel
+		port = servicePort
 	}
 
-	addrs, err := net.LookupHost(label)
+	ip, err := simpleLookupHost(net.DefaultResolver, label)
 	if err != nil {
-		// On resolution failure, error out
 		return nil, 0, err
 	}
-	if len(addrs) < 1 {
-		return nil, 0, fmt.Errorf("Empty dns reponse for %q", label)
-	}
-
-	// prefer IPv4. No real reason.
-	for _, addr := range addrs {
-		ip := netParseIP(addr)
-		if ip.To4() != nil {
-			return ip.To4(), 0, nil
-		}
-	}
-
-	ip := netParseIP(addrs[0])
-	if ip == nil {
-		return nil, 0, fmt.Errorf("Empty dns reponse for %q", label)
-	}
-	return ip, 0, nil
+	return ip, port, nil
 }
 
 func netParseOrResolveIP(h string) (_ip net.IP, _resolved bool, _err error) {
