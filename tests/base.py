@@ -109,10 +109,11 @@ class TestCase(unittest.TestCase):
         if isinstance(argv1, str):
             argv1 = shlex.split(argv1)
 
-        a = argv0 + argv1
         if netns:
-            a = a + ["-netns", self.net_ns_path()]
-        p = Process(a, close_fds=close_fds)
+            argv1 = argv1 + ["-netns=%s" % self.net_ns_path()]
+        if '.cover' in SLIRPNETSTACKBIN:
+            argv1 = ['--args=%s' % i for i in argv1]
+        p = Process(argv0 + argv1, close_fds=close_fds)
         self._add_teardown(p)
         return p
 

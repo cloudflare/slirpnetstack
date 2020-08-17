@@ -43,7 +43,7 @@ var (
 	dnsTTL                time.Duration
 )
 
-func init() {
+func initFlagSet(flag *flag.FlagSet) {
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -65,7 +65,7 @@ func init() {
 }
 
 func main() {
-	status := Main()
+	status := Main(os.Args[0], os.Args[1:])
 	os.Exit(status)
 }
 
@@ -90,7 +90,7 @@ type State struct {
 	srcIPs SrcIPs
 }
 
-func Main() int {
+func Main(programName string, args []string) int {
 	var (
 		state   State
 		linkEP  stack.LinkEndpoint
@@ -112,10 +112,27 @@ func Main() int {
 		}
 	}
 
-	// flag.Parse might be called from tests first. To avoid
-	// duplicated items in list, ensure parsing is done only once.
-	if flag.Parsed() == false {
-		flag.Parse()
+	// Welcome to the golang flag parsing mess! We need to set our
+	// own flagset and not use the defaults because of how we
+	// handle the test coverage. You see, when running in coverage
+	// mode, golang cover test execs "flag.Parse()" by
+	// itself. This means we could do second flag.Parse here,
+	// leading to doubly-parsing of flags. On top of that imagine
+	// an error - our custom structures that have .Set and .String
+	// methods will be called by flag.Parse called from test main,
+	// and on error Exit(2) which will _not_ be counted against
+	// code coverage, because it exis before code coverage machine
+	// even starts. The point is - we need to custom parse flags
+	// ourselves and we need to make sure that we don't use the
+	// global flag.Parse machinery when running from coverage
+	// tests.
+	{
+		flagSet := flag.NewFlagSet(programName, flag.ContinueOnError)
+		initFlagSet(flagSet)
+		err := flagSet.Parse(args)
+		if err != nil {
+			return 2
+		}
 	}
 
 	if gomaxprocs > 0 {
@@ -173,12 +190,12 @@ func Main() int {
 	if fd == -1 {
 		fd, tapMode, mtu, err = GetTunTap(netNsPath, ifName)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to open TUN/TAP: %s", err)
+			fmt.Fprintf(os.Stderr, "Failed to open TUN/TAP: %s\n", err)
 			return -3
 		}
 	} else {
 		if netNsPath != "" {
-			fmt.Fprintf(os.Stderr, "Please specify either -fd or -netns")
+			fmt.Fprintf(os.Stderr, "Please specify either -fd or -netns\n")
 			return -4
 		}
 		if mtu == 0 {
@@ -203,25 +220,25 @@ func Main() int {
 	s := NewStack(bufSize, bufSize)
 
 	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu)); err != nil {
-		fmt.Fprintf(os.Stderr, "[!] Failed to create linkEP: %s", err)
+		fmt.Fprintf(os.Stderr, "[!] Failed to create linkEP: %s\n", err)
 		return -5
 	}
 
 	if pcapPath != "" {
 		pcapFile, err := os.OpenFile(pcapPath, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[!] Failed to open PCAP file: %s", err)
+			fmt.Fprintf(os.Stderr, "[!] Failed to open PCAP file: %s\n", err)
 			return -6
 		}
 		if linkEP, err = sniffer.NewWithWriter(linkEP, pcapFile, uint32(mtu)); err != nil {
-			fmt.Fprintf(os.Stderr, "[!]Failed to sniff linkEP: %s", err)
+			fmt.Fprintf(os.Stderr, "[!]Failed to sniff linkEP: %s\n", err)
 			return -7
 		}
 		defer pcapFile.Close()
 	}
 
 	if err = createNIC(s, 1, linkEP); err != nil {
-		fmt.Fprintf(os.Stderr, "[!] Failed to createNIC: %s", err)
+		fmt.Fprintf(os.Stderr, "[!] Failed to createNIC: %s\n", err)
 		return -8
 
 	}
@@ -261,7 +278,7 @@ func Main() int {
 	for i, rf := range remoteFwd {
 		bindAddr := rf.BindAddr()
 		if bindAddr == nil {
-			fmt.Fprintf(os.Stderr, "[!] Failed to resolve bind address %q", rf.bind.String())
+			fmt.Fprintf(os.Stderr, "[!] Failed to resolve bind address %q\n", rf.bind.String())
 			return -10
 		}
 		fmt.Printf("[+] Accepting on remote side %s://%s\n",
