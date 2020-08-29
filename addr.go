@@ -128,50 +128,66 @@ func (f *FwdAddrSlice) Set(value string) error {
 	return nil
 }
 
-func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, hostAddrDef net.IP) {
+// SetDefaultAddrs populates any unset endpoint with the provided default value.
+// IPv4 or IPv6 addresses may be nil.
+func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, bindAddr6Def net.IP, hostAddrDef net.IP, hostAddr6Def net.IP) {
 	for i, _ := range *f {
 		fa := &(*f)[i]
-		fa.bind.SetDefaultAddr(bindAddrDef)
-		fa.host.SetDefaultAddr(hostAddrDef)
+		fa.bind.SetDefaultAddr(bindAddrDef, bindAddr6Def)
+		fa.host.SetDefaultAddr(hostAddrDef, hostAddr6Def)
 	}
 }
 
+// BindAddr gets the IPv4 or IPv6 address of the bind location with a preference of IPv4. nil is returned on error.
 func (f *FwdAddr) BindAddr() net.Addr {
 	switch f.network {
 	case "tcp":
-		x := f.bind.GetTCPAddr()
-		if x == nil {
+		ipv4, ipv6 := f.bind.GetTCPAddr()
+		if ipv4 == nil && ipv6 == nil {
 			// must be explicit nil https://golang.org/doc/faq#nil_error
 			return nil
 		}
-		return x
+		if ipv4 != nil {
+			return ipv4
+		}
+		return ipv6
 	case "udp":
-		x := f.bind.GetUDPAddr()
-		if x == nil {
+		ipv4, ipv6 := f.bind.GetUDPAddr()
+		if ipv4 == nil && ipv6 == nil {
 			// must be explicit nil https://golang.org/doc/faq#nil_error
 			return nil
 		}
-		return x
+		if ipv4 != nil {
+			return ipv4
+		}
+		return ipv6
 	}
 	return nil
 }
 
+// HostAddr gets the IPv4 or IPv6 address of the host with a preference of IPv4. nil is returned on error.
 func (f *FwdAddr) HostAddr() net.Addr {
 	switch f.network {
 	case "tcp":
-		x := f.host.GetTCPAddr()
-		if x == nil {
+		ipv4, ipv6 := f.host.GetTCPAddr()
+		if ipv4 == nil && ipv6 == nil {
 			// must be explicit nil https://golang.org/doc/faq#nil_error
 			return nil
 		}
-		return x
+		if ipv4 != nil {
+			return ipv4
+		}
+		return ipv6
 	case "udp":
-		x := f.host.GetUDPAddr()
-		if x == nil {
+		ipv4, ipv6 := f.host.GetUDPAddr()
+		if ipv4 == nil && ipv6 == nil {
 			// must be explicit nil https://golang.org/doc/faq#nil_error
 			return nil
 		}
-		return x
+		if ipv4 != nil {
+			return ipv4
+		}
+		return ipv6
 	}
 	return nil
 }
@@ -313,10 +329,7 @@ func (f *IPFlag) String() string {
 func (f *IPFlag) Set(value string) error {
 	var err error
 	f.ip, _, err = netParseOrResolveIP(value)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 type IPPortRange struct {

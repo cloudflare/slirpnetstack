@@ -13,9 +13,19 @@ type Listener interface {
 }
 
 func LocalForwardTCP(state *State, s *stack.Stack, rf FwdAddr, doneChannel <-chan bool) (Listener, error) {
-	tmpBind := rf.bind.GetTCPAddr()
-	host := rf.host.GetTCPAddr()
-	if tmpBind == nil || host == nil {
+	var tmpBind, host *net.TCPAddr
+	// Match local and bind address versions. IPv4 has preference.
+	if rf.bind.hasIPv4() && rf.host.hasIPv4() {
+		// IPv4
+		tmpBind, _ = rf.bind.GetTCPAddr()
+		host, _ = rf.host.GetTCPAddr()
+	} else if rf.bind.hasIPv6() && rf.host.hasIPv6() {
+		// IPv6
+		_, tmpBind = rf.bind.GetTCPAddr()
+		_, host = rf.host.GetTCPAddr()
+	} else if (rf.bind.hasIPv4() && rf.host.hasIPv6()) || (rf.bind.hasIPv6() && rf.host.hasIPv4()) {
+		return nil, fmt.Errorf("Host and bind have no common IP versions")
+	} else {
 		return nil, fmt.Errorf("DNS lookup failed")
 	}
 
@@ -53,10 +63,19 @@ func (u *UDPListner) Addr() net.Addr {
 }
 
 func LocalForwardUDP(state *State, s *stack.Stack, rf FwdAddr, doneChannel <-chan bool) (Listener, error) {
-	tmpBind := rf.bind.GetUDPAddr()
-	targetAddr := rf.host.GetUDPAddr()
-
-	if tmpBind == nil || targetAddr == nil {
+	var tmpBind, targetAddr *net.UDPAddr
+	// Match local and bind address versions. IPv4 has preference.
+	if rf.bind.hasIPv4() && rf.host.hasIPv4() {
+		// IPv4
+		tmpBind, _ = rf.bind.GetUDPAddr()
+		targetAddr, _ = rf.host.GetUDPAddr()
+	} else if rf.bind.hasIPv6() && rf.host.hasIPv6() {
+		// IPv6
+		_, tmpBind = rf.bind.GetUDPAddr()
+		_, targetAddr = rf.host.GetUDPAddr()
+	} else if (rf.bind.hasIPv4() && rf.host.hasIPv6()) || (rf.bind.hasIPv6() && rf.host.hasIPv4()) {
+		return nil, fmt.Errorf("Host and bind have no common IP versions")
+	} else {
 		return nil, fmt.Errorf("DNS lookup failed")
 	}
 
