@@ -361,6 +361,42 @@ class LocalForwardingTest(base.TestCase):
         self.assertIn("192.168.1.100", read_log())
         self.assertIn("local-fwd conn", p.stdout_line())
 
+    @base.isolateHostNetwork()
+    def test_tcp_local_fwd_v6tov4(self):
+        ''' Test local forwarding - bind to local IPv6 port on host and
+        forward it to the guest via IPv4. '''
+        g_echo_port = self.start_tcp_echo(guest=True)
+        p = self.prun("-L tcp://[::]:0:10.0.2.100:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen")
+
+        with self.guest_netns():
+            self.assertTcpEcho(ip="::1", port=g_echo_port)
+        # ::1 is on the StaticRoutingDeny list, meaning it will not be spoofed
+        self.assertTcpEcho(ip="::1", port=port)
+        self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
+        self.assertIn("local-fwd done", p.stdout_line())
+        self.assertTcpEcho(ip="3ffe::100", port=port)
+        self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
+
+    @base.isolateHostNetwork()
+    def test_tcp_local_fwd_v4tov6(self):
+        ''' Test basic local forwarding - bind to local IPv4 port on host and
+        forward it to the guest via IPv6. '''
+        g_echo_port = self.start_tcp_echo(guest=True)
+        p = self.prun("-L tcp://0.0.0.0:0:[2001:2::100]:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen")
+
+        with self.guest_netns():
+            self.assertTcpEcho(ip="127.0.0.1", port=g_echo_port)
+        # 127.0.0.1 is on the StaticRoutingDeny list, meaning it will not be spoofed
+        self.assertTcpEcho(ip="127.0.0.1", port=port)
+        self.assertRegex(p.stdout_line(), "\\[2001:2::2\\]:\\d+-\\[2001:2::100\\]:%s local-fwd conn" % g_echo_port)
+        self.assertIn("local-fwd done", p.stdout_line())
+        self.assertTcpEcho(ip="192.168.1.100", port=port)
+        self.assertRegex(p.stdout_line(), "\\[2001:2::2\\]:\\d+-\\[2001:2::100\\]:%s local-fwd conn" % g_echo_port)
+
     def test_udp_local_fwd(self):
         ''' Test udp local forwarding - bind to local port on host and forward
         it to the guest. '''
@@ -393,6 +429,40 @@ class LocalForwardingTest(base.TestCase):
         self.assertIn("192.168.1.100", read_log())
         self.assertIn("192.168.1.100", read_log())
         self.assertIn("local-fwd conn", p.stdout_line())
+
+    @base.isolateHostNetwork()
+    def test_udp_local_fwd_v6tov4(self):
+        ''' Test local forwarding - bind to local IPv6 port on host and
+        forward it to the guest via IPv4. '''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://[::]:0:10.0.2.100:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="::1", port=g_echo_port)
+        # ::1 is on the StaticRoutingDeny list, meaning it will not be spoofed
+        self.assertUdpEcho(ip="::1", port=port)
+        self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
+        self.assertUdpEcho(ip="3ffe::100", port=port)
+        self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
+
+    @base.isolateHostNetwork()
+    def test_udp_local_fwd_v4tov6(self):
+        ''' Test basic local forwarding - bind to local IPv4 port on host and
+        forward it to the guest via IPv6. '''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://0.0.0.0:0:[2001:2::100]:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
+        # 127.0.0.1 is on the StaticRoutingDeny list, meaning it will not be spoofed
+        self.assertUdpEcho(ip="127.0.0.1", port=port)
+        self.assertRegex(p.stdout_line(), "\\[2001:2::2\\]:\\d+-\\[2001:2::100\\]:%s local-fwd conn" % g_echo_port)
+        self.assertUdpEcho(ip="192.168.1.100", port=port)
+        self.assertRegex(p.stdout_line(), "\\[2001:2::2\\]:\\d+-\\[2001:2::100\\]:%s local-fwd conn" % g_echo_port)
 
     def test_udprpc_local_fwd(self):
         '''Test udprcp local forwarding - bind to local port on host and
@@ -542,6 +612,48 @@ class LocalForwardingPPTest(base.TestCase):
         self.assertEqual(b"alamakota", s.recv(1024))
         s.close()
         self.assertIn("abcd::1", read_log())
+        self.assertIn("local-fwd PP done", p.stdout_line())
+
+    def test_tcp_pp_local_fwd_v6tov4(self):
+        '''  Test inbound TCP v6 proxy-protocol to v4 destination '''
+        g_echo_port, read_log = self.start_tcp_echo(guest=True, log=True)
+        p = self.prun("-L tcppp://[::]:0::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local PP listen")
+
+        with self.guest_netns():
+            self.assertTcpEcho(ip="127.0.0.1", port=g_echo_port)
+            self.assertIn("127.0.0.1", read_log())
+
+        s = utils.connect(port=port, ip="::1")
+        s.sendall(b"PROXY TCP4 abcd::1 dcba::1 1 2\r\n")
+        self.assertIn("local-fwd PP conn", p.stdout_line())
+        s.sendall(b"alamakota")
+        self.assertEqual(b"alamakota", s.recv(1024))
+        s.close()
+        # The source IPv6 address can't be spoofed to the IPv4 destination
+        self.assertIn("10.0.2.2", read_log())
+        self.assertIn("local-fwd PP done", p.stdout_line())
+
+    def test_tcp_pp_local_fwd_v4tov6(self):
+        '''  Test inbound TCP v4 proxy-protocol to v6 destination '''
+        g_echo_port, read_log = self.start_tcp_echo(guest=True, log=True)
+        p = self.prun("-L tcppp://:0:[2001:2::100]:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local PP listen")
+
+        with self.guest_netns():
+            self.assertTcpEcho(ip="::1", port=g_echo_port)
+            self.assertIn("::1", read_log())
+
+        s = utils.connect(port=port, ip="127.0.0.1")
+        s.sendall(b"PROXY TCP4 1.2.3.4 5.6.7.8 1 2\r\n")
+        self.assertIn("local-fwd PP conn", p.stdout_line())
+        s.sendall(b"alamakota")
+        self.assertEqual(b"alamakota", s.recv(1024))
+        s.close()
+        # The source IPv6 address can't be spoofed to the IPv4 destination
+        self.assertIn("[2001:2::2]", read_log())
         self.assertIn("local-fwd PP done", p.stdout_line())
 
 

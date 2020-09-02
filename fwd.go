@@ -136,26 +136,30 @@ func LocalForward(state *State, s *stack.Stack, conn KaConn, targetAddr net.Addr
 			srcIP    net.Addr
 			ppPrefix = ""
 		)
+		// When doing local forward, if the source IP of host
+		// connection had routable IP (unlike
+		// 127.0.0.1)... well... spoof it! The client might find it
+		// useful who launched the connection in the first place.
 		if proxyProtocol == false {
-			// When doing local forward, if the source IP of host
-			// connection had routable IP (unlike
-			// 127.0.0.1)... well... spoof it! The client might find it
-			// useful who launched the connection in the first place.
-			raddr := conn.RemoteAddr()
-			if IPNetContains(state.StaticRoutingDeny, netAddrIP(raddr)) == false {
-				srcIP = raddr
-			}
+			srcIP = conn.RemoteAddr()
 		} else {
 			ppPrefix = "PP "
-			if IPNetContains(state.StaticRoutingDeny, netAddrIP(ppSrc)) == false {
-				srcIP = ppSrc
-			} else {
-				// If the source IP as reported by PP
-				// is not routable, still forward
-				// connection. Just don't use/leak the
-				// original IP.
-			}
+			srcIP = ppSrc
 		}
+		// If the source IP as reported by PP or the client is not routable, still forward
+		// connection. Just don't use/leak the original IP.
+		var isSourcev4 = FullAddressFromAddr(srcIP).Addr.To4() != ""
+		var isTargetv4 = FullAddressFromAddr(targetAddr).Addr.To4() != ""
+		if IPNetContains(state.StaticRoutingDeny, netAddrIP(srcIP)) || isSourcev4 != isTargetv4 {
+			// Source IP not rewritten because:
+			//   * static routing deny
+			//   * IPv6 -> IPv4, IPv6 addr can't be mapped to IPv4
+			//   * IPv4 -> IPv6, IPv4 addr could be in IPv4-mapped-IPv6 format, but netstack refuses
+			//         See https://github.com/google/netstack/blob/master/tcpip/transport/tcp/endpoint.go:checkV4Mapped(),
+			//         which results in ErrInvalidEndpointState if Bind(IPv4-mapped-IPv6) then Connect(IPv6).
+			srcIP = nil
+		}
+
 		if srcIP != nil {
 			// It's very nice the proxy-protocol (or just
 			// client) gave us client port number, but we
