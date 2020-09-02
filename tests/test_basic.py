@@ -240,7 +240,7 @@ class GenericForwardingTest(base.TestCase):
         port = self.assertListenLine(p, "local-fwd Local listen tcp://127.0.0.1")
         self.assertEqual(port, echo_port)
 
-    def test_fwd_parsing_two(self):
+    def test_loc_parsing_two(self):
         '''Test basic forwarding parsing, port and host'''
         echo_port = 1237
         p = self.prun("-L 127.1.2.3:%s" % echo_port)
@@ -260,6 +260,117 @@ class GenericForwardingTest(base.TestCase):
         self.assertTcpEcho(ip="127.0.0.1", port=port)
         self.assertTcpEcho(ip="127.0.0.1", port=port)
         self.assertIn("local-fwd conn", p.stdout_line())
+
+
+class DefaultIPSelectionTests(base.TestCase):
+    def test_local_empty(self):
+        '''Test a local forward rule with no IPs given'''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://:0::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://127.0.0.1")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
+        self.assertUdpEcho(ip="127.0.0.1", port=port)
+        self.assertIn("local-fwd conn", p.stdout_line())
+
+    def test_local_implicit_host_v4(self):
+        '''Test a local forward rule with an implicit IPv4 host'''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://:0:10.0.2.100:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://127.0.0.1")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
+        self.assertUdpEcho(ip="127.0.0.1", port=port)
+        self.assertIn("local-fwd conn", p.stdout_line())
+
+    def test_local_implicit_forward_v4(self):
+        '''Test a local forward rule with an implicit IPv4 denstination'''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://127.0.0.1:0::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://127.0.0.1")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
+        self.assertUdpEcho(ip="127.0.0.1", port=port)
+        self.assertIn("local-fwd conn", p.stdout_line())
+
+    def test_local_implicit_host_v6(self):
+        '''Test a local forward rule with an implicit IPv6 host'''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://:0:[2001:2::100]:%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://[::1]")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="::1", port=g_echo_port)
+        self.assertUdpEcho(ip="::1", port=port)
+        self.assertIn("local-fwd conn", p.stdout_line())
+
+    def test_local_implicit_forward_v6(self):
+        '''Test a local forward rule with an implicit IPv6 denstination'''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://[::1]:0::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://[::1]")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="::1", port=g_echo_port)
+        self.assertUdpEcho(ip="::1", port=port)
+        self.assertIn("local-fwd conn", p.stdout_line())
+
+    def test_local_any_v4(self):
+        '''Test a local forward rule with the 0.0.0.0 addr'''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://0.0.0.0:0::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://[::]")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
+        self.assertUdpEcho(ip="127.0.0.1", port=port)
+        self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
+
+    def test_local_any_v6(self):
+        '''Test a local forward rule with the :: addr'''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://[::]:::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://[::]")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="::1", port=g_echo_port)
+        self.assertUdpEcho(ip="::1", port=port)
+        self.assertRegex(p.stdout_line(), "\\[2001:2::2\\]:\\d+-\\[2001:2::100\\]:%s local-fwd conn" % g_echo_port)
+
+    def test_localhost_v4(self):
+        '''Test a local forward rule with the localhost label'''
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://localhost:0::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://127.0.0.1")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
+        self.assertUdpEcho(ip="127.0.0.1", port=port)
+        self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
+
+    def test_localhost_v6(self):
+        '''Test a local forward rule with the ip-localhost label'''
+        # The implicit forward address is IPv4 because labels are resolved at runtime
+        g_echo_port = self.start_udp_echo(guest=True)
+        p = self.prun("-L udp://ip6-localhost:::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "local-fwd Local listen udp://[::1]")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="::1", port=g_echo_port)
+        self.assertUdpEcho(ip="::1", port=port)
+        self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
 
 
 class RemoteForwardingTest(base.TestCase):
@@ -617,7 +728,7 @@ class LocalForwardingPPTest(base.TestCase):
     def test_tcp_pp_local_fwd_v6tov4(self):
         '''  Test inbound TCP v6 proxy-protocol to v4 destination '''
         g_echo_port, read_log = self.start_tcp_echo(guest=True, log=True)
-        p = self.prun("-L tcppp://[::]:0::%s" % g_echo_port)
+        p = self.prun("-L tcppp://[::]:0:10.0.2.100:%s" % g_echo_port)
         self.assertStartSync(p)
         port = self.assertListenLine(p, "local-fwd Local PP listen")
 
@@ -638,7 +749,7 @@ class LocalForwardingPPTest(base.TestCase):
     def test_tcp_pp_local_fwd_v4tov6(self):
         '''  Test inbound TCP v4 proxy-protocol to v6 destination '''
         g_echo_port, read_log = self.start_tcp_echo(guest=True, log=True)
-        p = self.prun("-L tcppp://:0:[2001:2::100]:%s" % g_echo_port)
+        p = self.prun("-L tcppp://0.0.0.0:0:[2001:2::100]:%s" % g_echo_port)
         self.assertStartSync(p)
         port = self.assertListenLine(p, "local-fwd Local PP listen")
 
