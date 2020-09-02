@@ -275,6 +275,17 @@ class DefaultIPSelectionTests(base.TestCase):
         self.assertUdpEcho(ip="127.0.0.1", port=port)
         self.assertIn("local-fwd conn", p.stdout_line())
 
+    def test_remote_empty(self):
+        '''Test a remote forward rule with no IPs given'''
+        g_echo_port = self.start_udp_echo()
+        p = self.prun("-R udp://:0::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "Accepting on remote side udp://10.0.2.2")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="10.0.2.2", port=port)
+        self.assertRegex(p.stdout_line(), "127.0.0.1:\\d+-127.0.0.1:%s remote-fwd conn new" % g_echo_port)
+
     def test_local_implicit_host_v4(self):
         '''Test a local forward rule with an implicit IPv4 host'''
         g_echo_port = self.start_udp_echo(guest=True)
@@ -323,6 +334,17 @@ class DefaultIPSelectionTests(base.TestCase):
         self.assertUdpEcho(ip="::1", port=port)
         self.assertIn("local-fwd conn", p.stdout_line())
 
+    def test_remote_implicit_forward_v6(self):
+        '''Test a remote forward rule with an implicit IPv6 destination'''
+        g_echo_port = self.start_udp_echo()
+        p = self.prun("-R udp://[2001:2::2]:0::%s" % g_echo_port)
+        self.assertStartSync(p)
+        port = self.assertListenLine(p, "Accepting on remote side udp://2001:2::2")
+
+        with self.guest_netns():
+            self.assertUdpEcho(ip="2001:2::2", port=port)
+        self.assertRegex(p.stdout_line(), "\\[::1\\]:\\d+-\\[::1\\]:%s remote-fwd conn new" % g_echo_port)
+
     def test_local_any_v4(self):
         '''Test a local forward rule with the 0.0.0.0 addr'''
         g_echo_port = self.start_udp_echo(guest=True)
@@ -357,19 +379,6 @@ class DefaultIPSelectionTests(base.TestCase):
         with self.guest_netns():
             self.assertUdpEcho(ip="127.0.0.1", port=g_echo_port)
         self.assertUdpEcho(ip="127.0.0.1", port=port)
-        self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
-
-    def test_localhost_v6(self):
-        '''Test a local forward rule with the ip-localhost label'''
-        # The implicit forward address is IPv4 because labels are resolved at runtime
-        g_echo_port = self.start_udp_echo(guest=True)
-        p = self.prun("-L udp://ip6-localhost:::%s" % g_echo_port)
-        self.assertStartSync(p)
-        port = self.assertListenLine(p, "local-fwd Local listen udp://[::1]")
-
-        with self.guest_netns():
-            self.assertUdpEcho(ip="::1", port=g_echo_port)
-        self.assertUdpEcho(ip="::1", port=port)
         self.assertRegex(p.stdout_line(), "10.0.2.2:\\d+-10.0.2.100:%s local-fwd conn" % g_echo_port)
 
 
