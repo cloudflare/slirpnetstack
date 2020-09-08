@@ -76,7 +76,13 @@ type defAddress struct {
 func ParseDefAddress(ipS string, portS string) (_da *defAddress, _err error) {
 	da := &defAddress{}
 	if ipS != "" {
-		da.label = ipS
+		if ip := netParseIP(ipS); ip != nil {
+			// ipS is an IP literal
+			da.static.Addr = tcpip.Address(ip)
+		} else {
+			// ipS is a hostname to resolve later
+			da.label = ipS
+		}
 	}
 
 	if portS != "" {

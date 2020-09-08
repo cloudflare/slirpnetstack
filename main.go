@@ -153,10 +153,14 @@ func Main(programName string, args []string) int {
 
 	localFwd.SetDefaultAddrs(
 		netParseIP("127.0.0.1"),
-		netParseIP("10.0.2.100"))
+		netParseIP("::1"),
+		netParseIP("10.0.2.100"),
+		netParseIP("2001:2::100"))
 	remoteFwd.SetDefaultAddrs(
 		netParseIP("10.0.2.2"),
-		netParseIP("127.0.0.1"))
+		netParseIP("2001:2::2"),
+		netParseIP("127.0.0.1"),
+		netParseIP("::1"))
 
 	state.remoteUdpFwd = make(map[string]*FwdAddr)
 	state.remoteTcpFwd = make(map[string]*FwdAddr)

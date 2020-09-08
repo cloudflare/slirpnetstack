@@ -128,11 +128,21 @@ func (f *FwdAddrSlice) Set(value string) error {
 	return nil
 }
 
-func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, hostAddrDef net.IP) {
-	for i, _ := range *f {
+// SetDefaultAddrs populates any unset endpoint with the provided default value.
+// IPv6 values are only used if the one of the existing addresses is IPv6.
+func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, bindAddr6Def net.IP, hostAddrDef net.IP, hostAddr6Def net.IP) {
+	for i := range *f {
 		fa := &(*f)[i]
-		fa.bind.SetDefaultAddr(bindAddrDef)
-		fa.host.SetDefaultAddr(hostAddrDef)
+		if (fa.bind.static.Addr != "" && fa.bind.static.Addr.To4() == "") ||
+			(fa.host.static.Addr != "" && fa.host.static.Addr.To4() == "") {
+			// Bind and/or host is IPv6
+			fa.bind.SetDefaultAddr(bindAddr6Def)
+			fa.host.SetDefaultAddr(hostAddr6Def)
+		} else {
+			// Neither address is IPv6
+			fa.bind.SetDefaultAddr(bindAddrDef)
+			fa.host.SetDefaultAddr(hostAddrDef)
+		}
 	}
 }
 
