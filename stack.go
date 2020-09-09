@@ -9,7 +9,6 @@ import (
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
-	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
 	"gvisor.dev/gvisor/pkg/tcpip/link/rawfile"
 	"gvisor.dev/gvisor/pkg/tcpip/link/tun"
@@ -93,22 +92,35 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 
 	s := stack.New(opts)
 	s.SetForwarding(true)
-	s.SetTransportProtocolOption(tcp.ProtocolNumber, tcp.SACKEnabled(true))
-	s.SetNetworkProtocolOption(ipv4.ProtocolNumber, tcpip.DefaultTTLOption(64))
-	s.SetNetworkProtocolOption(ipv6.ProtocolNumber, tcpip.DefaultTTLOption(64))
+	{
+		opt := tcpip.TCPSACKEnabled(true)
+		s.SetTransportProtocolOption(tcp.ProtocolNumber, &opt)
+	}
+	{
+		opt := tcpip.DefaultTTLOption(64)
+		s.SetNetworkProtocolOption(ipv4.ProtocolNumber, &opt)
+		s.SetNetworkProtocolOption(ipv6.ProtocolNumber, &opt)
+	}
 
 	// We expect no packet loss, therefore we can bump
 	// buffers. Too large buffers thrash cache, so there is litle
 	// point in too large buffers.
-	s.SetTransportProtocolOption(tcp.ProtocolNumber,
-		tcp.ReceiveBufferSizeOption{1, rcvBufferSize, rcvBufferSize})
-	s.SetTransportProtocolOption(tcp.ProtocolNumber,
-		tcp.SendBufferSizeOption{1, sndBufferSize, sndBufferSize})
+	{
+		opt := tcpip.TCPReceiveBufferSizeRangeOption{Min: 1, Default: rcvBufferSize, Max: rcvBufferSize}
+		s.SetTransportProtocolOption(tcp.ProtocolNumber, &opt)
+	}
+	{
+		opt := tcpip.TCPSendBufferSizeRangeOption{Min: 1, Default: sndBufferSize, Max: sndBufferSize}
+		s.SetTransportProtocolOption(tcp.ProtocolNumber, &opt)
+	}
 
 	// Enable Receive Buffer Auto-Tuning, see:
 	// https://github.com/google/gvisor/issues/1666
-	s.SetTransportProtocolOption(tcp.ProtocolNumber,
-		tcpip.ModerateReceiveBufferOption(true))
+	{
+		opt := tcpip.TCPModerateReceiveBufferOption(true)
+		s.SetTransportProtocolOption(tcp.ProtocolNumber,
+			&opt)
+	}
 	return s
 }
 
@@ -136,9 +148,12 @@ func createNIC(s *stack.Stack, nic tcpip.NICID, linkEP stack.LinkEndpoint) error
 	// Assign L2 and L3 addresses
 	s.AddAddress(nic, arp.ProtocolNumber, arp.ProtocolAddress)
 
-	s.AddAddressRange(nic, ipv4.ProtocolNumber, header.IPv4EmptySubnet)
-	s.AddAddressRange(nic, ipv6.ProtocolNumber, header.IPv6EmptySubnet)
-
+	// In past we did s.AddAddressRange to assign 0.0.0.0/0 onto
+	// the interface. We need that to be able to terminate all the
+	// incoming connections - to any ip. AddressRange API has been
+	// removed and the suggested workaround is to use Promiscous
+	// mode. https://github.com/google/gvisor/issues/3876
+	s.SetPromiscuousMode(nic, true)
 	return nil
 }
 
@@ -211,7 +226,7 @@ func GonetDialTCP(s *stack.Stack, laddr, raddr *tcpip.FullAddress, network tcpip
 		case <-notifyCh:
 		}
 
-		err = ep.GetSockOpt(tcpip.ErrorOption{})
+		err = ep.LastError()
 	}
 	if err != nil {
 		ep.Close()
@@ -228,11 +243,19 @@ type GonetTCPConn struct {
 
 func (c *GonetTCPConn) SetTimeouts(kaInterval time.Duration, kaCount int) error {
 	c.ep.SetSockOptBool(tcpip.KeepaliveEnabledOption, true)
-	c.ep.SetSockOpt(tcpip.KeepaliveIdleOption(kaInterval))
-	c.ep.SetSockOpt(tcpip.KeepaliveIntervalOption(kaInterval))
+	{
+		opt := tcpip.KeepaliveIdleOption(kaInterval)
+		c.ep.SetSockOpt(&opt)
+	}
+	{
+		opt := tcpip.KeepaliveIntervalOption(kaInterval)
+		c.ep.SetSockOpt(&opt)
+	}
 	c.ep.SetSockOptInt(tcpip.KeepaliveCountOption, kaCount)
-	ut := UserTimeoutFromKeepalive(kaInterval, kaCount)
-	c.ep.SetSockOpt(tcpip.TCPUserTimeoutOption(ut))
+	{
+		opt := tcpip.TCPUserTimeoutOption(UserTimeoutFromKeepalive(kaInterval, kaCount))
+		c.ep.SetSockOpt(&opt)
+	}
 	return nil
 }
 

@@ -68,9 +68,9 @@ $(GOTESTTARGETS): $(wildcard tests/*/*.go)
 	go build -o $@ $(IMPORT_PATH)/tests/$(subst bin/,,$@)
 
 update-gomod:
-	# was:
-	# go get -u gvisor.dev/gvisor@go all
-	# but we have regression in "Don't support address ranges" commit
-	go get -u gvisor.dev/gvisor@2f6429be86f927058392a85dcb6512bebb836d9d
+	# Use something like that if you want to pin to specific commit:
+	#   go get -u gvisor.dev/gvisor@2f6429be86f927058392a85dcb6512bebb836d9d
+	# otherwise this fetches tip
+	go get -u gvisor.dev/gvisor@go all
 	go mod tidy
 	$(MAKE) bin/gocovmerge bin/slirpnetstack bin/slirpnetstack.cover
