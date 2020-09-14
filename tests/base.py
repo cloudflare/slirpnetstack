@@ -140,9 +140,9 @@ class TestCase(unittest.TestCase):
                   "ip link set tun0 mtu 65521;"
                   "ip link set tun0 up;"
                   "ip addr add 10.0.2.100/24 dev tun0;"
-                  "ip addr add 2001:2::100/32 dev tun0 nodad;"
+                  "ip addr add fd00::100/64 dev tun0 nodad;"
                   "ip route add 0.0.0.0/0 via 10.0.2.2 dev tun0;"
-                  "ip route add ::/0 via 2001:2::2 dev tun0;")
+                  "ip route add ::/0 via fd00::2 dev tun0;")
         w = subprocess.Popen(["/bin/sleep", "1073741824"])
         self.guest_ns_pid = w.pid
         self._add_teardown(w)

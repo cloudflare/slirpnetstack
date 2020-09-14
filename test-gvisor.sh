@@ -36,8 +36,8 @@ nsenter -n -t ${NSPID} bash -c " \
 # IPv6 support
 if [ ]; then
     nsenter -n -t ${NSPID} bash -c " \
-            ip addr add 2001:2::100/32 dev tun0; \
-            ip route add ::/0 via 2001:2::2 dev tun0;"
+            ip addr add fd00::100/64 dev tun0; \
+            ip route add ::/0 via fd00::2 dev tun0;"
 fi
 
 echo "[*] Starting gvisor"

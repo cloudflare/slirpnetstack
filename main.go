@@ -155,10 +155,10 @@ func Main(programName string, args []string) int {
 		netParseIP("127.0.0.1"),
 		netParseIP("::1"),
 		netParseIP("10.0.2.100"),
-		netParseIP("2001:2::100"))
+		netParseIP("fd00::100"))
 	remoteFwd.SetDefaultAddrs(
 		netParseIP("10.0.2.2"),
-		netParseIP("2001:2::2"),
+		netParseIP("fd00::2"),
 		netParseIP("127.0.0.1"),
 		netParseIP("::1"))
 
@@ -250,7 +250,7 @@ func Main(programName string, args []string) int {
 	StackRoutingSetup(s, 1, "10.0.2.2/24")
 	StackPrimeArp(s, 1, netParseIP("10.0.2.100"))
 
-	StackRoutingSetup(s, 1, "2001:2::2/32")
+	StackRoutingSetup(s, 1, "fd00::2/64")
 
 	doneChannel := make(chan bool)
 

@@ -22,9 +22,9 @@ The magic happens with these L3 packets - slirpnetstack uses a
 user-space (unprivileged) network stack. It is able to terminate
 network connections and translate them into syscalls.
 
-Therefore, received SYN from guest network namespace becomes connect()
-in the host kernel namespace. L3 UDP packet becomes sendto(), and so
-on.
+Therefore, a received SYN from guest network namespace becomes
+connect() in the host kernel namespace. L3 UDP packet becomes
+sendto(), and so on.
 
 slirpnetstack can do three things:
 
@@ -64,6 +64,22 @@ Broken things:
  - gvisor/netstack has some implementation issues, so of course this
    project inhertits them.
 
+Networking topology
+-------------------
+
+Slirpnetstack assumes that the namespace will have the following IP's:
+
+  - `10.0.2.100/24` for IPv4
+  - `[fd00::100]/64` for IPv6
+
+And that the guest will use the following IP's as default routes:
+
+  - `10.0.2.2` for IPv4
+  - `[fd00::2]` for IPv6
+
+In other words, Slirpnetstack listens on these IP's and will handle
+traffic routed to it.
+
 
 Usage with custom network namespace
 -----------------------------------
@@ -84,9 +100,9 @@ ip tuntap add mode tap name tun0
 ip link set tun0 mtu 65521
 ip link set tun0 up
 ip addr add 10.0.2.100/24 dev tun0
-ip addr add 2001:2::100/32 dev tun0
+ip addr add fd00::100/64 dev tun0
 ip route add 0.0.0.0/0 via 10.0.2.2 dev tun0
-ip route add ::/0 via 2001:2::2 dev tun0
+ip route add ::/0 via fd00::2 dev tun0
 ```
 
 Finally, you need a pid of the process having this namespace. Easiest
