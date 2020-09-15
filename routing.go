@@ -176,13 +176,15 @@ func RoutingForward(guest KaConn, srcIPs *SrcIPs, loc net.Addr) {
 
 func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
 	var pe ProxyError
-	hostAddr := rf.HostAddr()
-	if hostAddr == nil {
-		fmt.Printf("[!] %s://%s-%s/%s remote-fwd dns lookup error\n",
+	hostAddr, err := rf.HostAddr()
+	if err != nil {
+		// dns lookup error
+		fmt.Printf("[!] %s://%s-%s/%s remote-fwd %v\n",
 			rf.network,
 			guest.RemoteAddr(),
 			guest.LocalAddr(),
-			rf.host.String())
+			rf.host.String(),
+			err)
 		return
 	}
 	xhost, err := OutboundDial(srcIPs, hostAddr)

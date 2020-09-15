@@ -280,9 +280,9 @@ func Main(programName string, args []string) int {
 	}
 
 	for i, rf := range remoteFwd {
-		bindAddr := rf.BindAddr()
-		if bindAddr == nil {
-			fmt.Fprintf(os.Stderr, "[!] Failed to resolve bind address %q\n", rf.bind.String())
+		bindAddr, err := rf.BindAddr()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[!] Failed to resolve bind address. %v\n", err)
 			return -10
 		}
 		fmt.Printf("[+] Accepting on remote side %s://%s\n",

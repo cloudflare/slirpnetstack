@@ -146,44 +146,40 @@ func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, bindAddr6Def net.IP, 
 	}
 }
 
-func (f *FwdAddr) BindAddr() net.Addr {
+func (f *FwdAddr) BindAddr() (net.Addr, error) {
 	switch f.network {
 	case "tcp":
 		x := f.bind.GetTCPAddr()
 		if x == nil {
-			// must be explicit nil https://golang.org/doc/faq#nil_error
-			return nil
+			return nil, fmt.Errorf("dns lookup error of tcp addr: %w", f.bind.error)
 		}
-		return x
+		return x, nil
 	case "udp":
 		x := f.bind.GetUDPAddr()
 		if x == nil {
-			// must be explicit nil https://golang.org/doc/faq#nil_error
-			return nil
+			return nil, fmt.Errorf("dns lookup error of udp addr: %w", f.bind.error)
 		}
-		return x
+		return x, nil
 	}
-	return nil
+	return nil, fmt.Errorf("unknown network type: %v", f.network)
 }
 
-func (f *FwdAddr) HostAddr() net.Addr {
+func (f *FwdAddr) HostAddr() (net.Addr, error) {
 	switch f.network {
 	case "tcp":
 		x := f.host.GetTCPAddr()
 		if x == nil {
-			// must be explicit nil https://golang.org/doc/faq#nil_error
-			return nil
+			return nil, fmt.Errorf("dns lookup error of tcp addr: %w", f.host.error)
 		}
-		return x
+		return x, nil
 	case "udp":
 		x := f.host.GetUDPAddr()
 		if x == nil {
-			// must be explicit nil https://golang.org/doc/faq#nil_error
-			return nil
+			return nil, fmt.Errorf("dns lookup error of udp addr: %w", f.host.error)
 		}
-		return x
+		return x, nil
 	}
-	return nil
+	return nil, fmt.Errorf("unknown network type: %v", f.network)
 }
 
 func FullAddressFromAddr(a net.Addr) *tcpip.FullAddress {

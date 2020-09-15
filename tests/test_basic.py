@@ -1009,7 +1009,7 @@ class RoutingTestSecurity(base.TestCase):
         p = self.prun("-dns-ttl=0 -R=tcp://tcp.echo.server@srv-%d:0::2222" % (dns_port, ))
         self.assertIn("Joininig", p.stderr_line())
         self.assertIn("Opening tun ", p.stderr_line())
-        self.assertIn('[!] Failed to resolve bind address "tcp.echo.server@srv-1-failed', p.stderr_line())
+        self.assertIn('[!] Failed to resolve bind address. dns lookup error of tcp addr: Failed to lookup SRV "tcp.echo.server"', p.stderr_line())
 
         p.close()
         self.assertEqual(p.rc, 246, "exit code should be 246")
