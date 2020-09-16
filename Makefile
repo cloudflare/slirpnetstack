@@ -1,6 +1,9 @@
 export GOPRIVATE := code.cfops.it
 IMPORT_PATH := github.com/majek/slirpnetstack
-GOFLAGS=-ldflags=-compressdwarf=false
+
+VERSION := $(shell git describe --tags --always --dirty="-dev")
+DATE    := $(shell date -u '+%Y-%m-%d-%H:%MUTC')
+GOFLAGS := -ldflags='-compressdwarf=false -X "$(IMPORT_PATH)/ext.Version=$(VERSION)" -X "$(IMPORT_PATH)/ext.BuildTime=$(DATE)"'
 
 bin/slirpnetstack: *.go go.mod
 	go build \
@@ -65,7 +68,9 @@ GOTESTTARGETS = \
 
 test: $(GOTESTTARGETS)
 $(GOTESTTARGETS): $(wildcard tests/*/*.go)
-	go build -o $@ $(IMPORT_PATH)/tests/$(subst bin/,,$@)
+	go build \
+		-o $@ \
+		$(IMPORT_PATH)/tests/$(subst bin/,,$@)
 
 update-gomod:
 	# Use something like that if you want to pin to specific commit:

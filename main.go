@@ -14,6 +14,7 @@ import (
 	"github.com/opencontainers/runc/libcontainer/system"
 	"golang.org/x/sys/unix"
 
+	"github.com/majek/slirpnetstack/ext"
 	"gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -22,6 +23,7 @@ import (
 )
 
 var (
+	cmdVersion            bool
 	fd                    int
 	netNsPath             string
 	ifName                string
@@ -44,6 +46,7 @@ var (
 )
 
 func initFlagSet(flag *flag.FlagSet) {
+	flag.BoolVar(&cmdVersion, "version", false, "Print slirpnetstack version and exit")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -133,6 +136,12 @@ func Main(programName string, args []string) int {
 		if err != nil {
 			return 2
 		}
+	}
+
+	if cmdVersion {
+		fmt.Printf("slirpnetstack version %s\n", ext.Version)
+		fmt.Printf("build time %s\n", ext.BuildTime)
+		return 0
 	}
 
 	if gomaxprocs > 0 {

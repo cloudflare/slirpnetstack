@@ -16,6 +16,17 @@ class BasicTest(base.TestCase):
         e = p.stderr_line()
         self.assertIn("Usage of ", e)
 
+    def test_version(self):
+        ''' Basic test if -version prints version. '''
+        p = self.prun("-version", netns=False)
+        o = p.stdout_line()
+        self.assertIn("slirpnetstack version ", o)
+        self.assertNotIn("DEV", o)
+        o = p.stdout_line()
+        self.assertIn("build time ", o)
+        self.assertIn("UTC", o)
+        self.assertNotIn("unknown", o)
+
     def test_basic_ping(self):
         ''' Due to how netstack is configured, we will answer to ping against
         any IP. Let's test it!.
