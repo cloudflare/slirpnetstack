@@ -130,7 +130,7 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 
 func RoutingForward(guest KaConn, srcIPs *SrcIPs, loc net.Addr) {
 	// Cache guest.RemoteAddr() because it becomes nil on
-	// guest.Close() for UDP.
+	// guest.Close().
 	guestRemoteAddr := guest.RemoteAddr()
 
 	var pe ProxyError
@@ -175,13 +175,17 @@ func RoutingForward(guest KaConn, srcIPs *SrcIPs, loc net.Addr) {
 }
 
 func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
+	// Cache guest.RemoteAddr() because it becomes nil on
+	// guest.Close().
+	guestRemoteAddr := guest.RemoteAddr()
+
 	var pe ProxyError
 	hostAddr, err := rf.HostAddr()
 	if err != nil {
 		// dns lookup error
 		fmt.Printf("[!] %s://%s-%s/%s remote-fwd %v\n",
 			rf.network,
-			guest.RemoteAddr(),
+			guestRemoteAddr,
 			guest.LocalAddr(),
 			rf.host.String(),
 			err)
@@ -196,7 +200,7 @@ func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
 		if logConnections {
 			fmt.Printf("[!] %s://%s-%s/%s remote-fwd conn error: %s\n",
 				rf.network,
-				guest.RemoteAddr(),
+				guestRemoteAddr,
 				guest.LocalAddr(),
 				rf.host.String(),
 				pe)
@@ -205,7 +209,7 @@ func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
 		if logConnections {
 			fmt.Printf("[+] %s://%s-%s/%s-%s remote-fwd conn new\n",
 				rf.network,
-				guest.RemoteAddr(),
+				guestRemoteAddr,
 				guest.LocalAddr(),
 				xhost.LocalAddr(),
 				xhost.RemoteAddr())
@@ -221,7 +225,7 @@ func RemoteForward(guest KaConn, srcIPs *SrcIPs, rf *FwdAddr) {
 		if logConnections {
 			fmt.Printf("[-] %s://%s-%s/%s-%s remote-fwd conn done: %s\n",
 				rf.network,
-				guest.RemoteAddr(),
+				guestRemoteAddr,
 				guest.LocalAddr(),
 				xhost.LocalAddr(),
 				xhost.RemoteAddr(),
