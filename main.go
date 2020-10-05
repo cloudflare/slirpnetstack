@@ -281,10 +281,13 @@ func Main(programName string, args []string) int {
 				ppPrefix = "PP "
 			}
 			laddr := srv.Addr()
-			fmt.Printf("[+] local-fwd Local %slisten %s://%s\n",
-				ppPrefix,
-				laddr.Network(),
-				laddr.String())
+
+			if !quiet {
+				fmt.Printf("[+] local-fwd Local %slisten %s://%s\n",
+					ppPrefix,
+					laddr.Network(),
+					laddr.String())
+			}
 		}
 	}
 
@@ -294,8 +297,10 @@ func Main(programName string, args []string) int {
 			fmt.Fprintf(os.Stderr, "[!] Failed to resolve bind address. %v\n", err)
 			return -10
 		}
-		fmt.Printf("[+] Accepting on remote side %s://%s\n",
-			rf.network, rf.bind.String())
+		if !quiet {
+			fmt.Printf("[+] Accepting on remote side %s://%s\n",
+				rf.network, rf.bind.String())
+		}
 		switch rf.network {
 		case "tcp":
 			state.remoteTcpFwd[bindAddr.String()] = &remoteFwd[i]
