@@ -290,14 +290,20 @@ func AddrFromString(value string) (net.Addr, error) {
 func SplitHostPort(buf string) []string {
 	sliceOfParts := make([]string, 0)
 	part := make([]byte, 0)
-	in := false
+	var parens int
 	for _, c := range []byte(buf) {
 		switch {
-		case in == false && c == '[':
-			in = true
-		case in == true && c == ']':
-			in = false
-		case in == false && c == ':':
+		case c == '[':
+			if parens > 0 {
+				part = append(part, c)
+			}
+			parens++
+		case c == ']':
+			if parens > 1 {
+				part = append(part, c)
+			}
+			parens--
+		case parens == 0 && c == ':':
 			sliceOfParts = append(sliceOfParts, string(part))
 			part = make([]byte, 0)
 		default:

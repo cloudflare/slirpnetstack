@@ -191,11 +191,11 @@ func FullResolve(label string) (net.IP, uint16, error) {
 		if !strings.HasPrefix(dnsSrv, "srv-") {
 			return nil, 0, fmt.Errorf("Unknown dns type %q", dnsSrv)
 		}
-		dnsPort, err := strconv.ParseUint(dnsSrv[4:], 10, 16)
-		if err != nil {
-			return nil, 0, fmt.Errorf("Cant parse dns server port %q", dnsSrv[4:])
+
+		dnsSrvAddr := dnsSrv[4:]
+		if !strings.Contains(dnsSrvAddr, ":") {
+			dnsSrvAddr = fmt.Sprintf("127.0.0.1:%s", dnsSrvAddr)
 		}
-		dnsSrvAddr := fmt.Sprintf("127.0.0.1:%d", dnsPort)
 		r := &net.Resolver{
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {

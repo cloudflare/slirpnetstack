@@ -1024,3 +1024,41 @@ class RoutingTestSecurity(base.TestCase):
 
         p.close()
         self.assertEqual(p.rc, 246, "exit code should be 246")
+
+    @base.isolateHostNetwork()
+    def test_remote_srv_ipv6(self):
+        ''' Test -R=tcp://:2222:[tcp.echo.server@srv-[::1]:8600]:0 syntax '''
+        echo_tcp_port, tcp_log = self.start_tcp_echo(log=True)
+        echo_udp_port, udp_log = self.start_udp_echo(log=True)
+        dns_port, dns = self.start_dns("--addr=[::1]",
+                                  "tcp.echo.server.=localhost:%d" % echo_tcp_port,
+                                  "udp.echo.server.=localhost:%d" % echo_udp_port)
+        p = self.prun("-dns-ttl=0 -R=tcp://:2222:[tcp.echo.server@srv-[::1]:%d]:0 -R=udp://:2222:[udp.echo.server@srv-[::1]:%d]:0" % (dns_port, dns_port))
+
+        self.assertStartSync(p)
+        self.assertIn("Accepting", p.stdout_line())
+        self.assertIn("Accepting", p.stdout_line())
+
+        with self.guest_netns():
+            self.assertTcpEcho(port=2222, ip="10.0.2.2")
+            self.assertIn("%s" % echo_tcp_port, p.stdout_line())
+            self.assertIn("%s" % echo_tcp_port, p.stdout_line())
+            self.assertUdpEcho(port=2222, ip="10.0.2.2")
+            self.assertIn("%s" % echo_udp_port, p.stdout_line())
+
+            dns.close()
+            s = utils.connect(port=2222, ip="10.0.2.2")
+            s.close()
+            self.assertIn("dns lookup error", p.stdout_line())
+            s = utils.connect(port=2222, ip="10.0.2.2", udp=True)
+            s.sendall(b"ala")
+            s.close()
+            self.assertIn("dns lookup error" , p.stdout_line())
+
+        self.assertIn("127.0.0.1", tcp_log())
+        self.assertTcpEcho(ip="127.0.0.1", src='127.1.2.4', port=echo_tcp_port)
+        self.assertIn("127.1.2.4", tcp_log())
+
+        self.assertIn("127.0.0.1", udp_log())
+        self.assertUdpEcho(ip="127.0.0.1", src='127.1.2.4', port=echo_udp_port)
+        self.assertIn("127.1.2.4", udp_log())
