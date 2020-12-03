@@ -106,6 +106,13 @@ func LocalForward(state *State, s *stack.Stack, conn KaConn, targetAddr net.Addr
 	)
 	if proxyProtocol && buf == nil {
 		buf = make([]byte, 4096)
+		if _, ok := conn.(*KaUDPConn); ok {
+			// For UDP this sadly needs to be 64KiB
+			// because the packet might be large and
+			// fragmented.
+			buf = make([]byte, 64*1024)
+		}
+
 		n, err := conn.Read(buf)
 		if err != nil {
 			goto pperror

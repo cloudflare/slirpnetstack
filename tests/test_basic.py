@@ -225,6 +225,22 @@ class RoutingTest(base.TestCase):
             self.assertEqual(b"kota", s.recv(1024))
             s.close()
 
+    @base.isolateHostNetwork()
+    def test_udp_large_packet(self):
+        '''Test UDP packet larger than 1500 bytes'''
+        echo_port = self.start_udp_echo()
+        self.assertUdpEcho(port=echo_port, ip="192.168.1.100")
+
+        p = self.prun("-enable-host")
+        self.assertStartSync(p)
+        with self.guest_netns():
+            s = utils.connect(port=echo_port, ip="192.168.1.100", udp=True)
+            a = s.send(b"a"*16385)
+            s.sendall(b"a"*(65535-28))
+            self.assertEqual(16385, len(s.recv(64*1024)))
+            self.assertEqual(65507, len(s.recv(64*1024)))
+            s.close()
+
 
 class GenericForwardingTest(base.TestCase):
     def test_fwd_parsing_one(self):

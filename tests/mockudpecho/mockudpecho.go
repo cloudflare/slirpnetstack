@@ -40,7 +40,7 @@ func main() {
 
 	unconn.Prime(ln)
 
-	var buf [4096]byte
+	var buf [64*1024]byte
 	for {
 		n, laddr, raddr, err := unconn.Read(ln, buf[:])
 		if err != nil {

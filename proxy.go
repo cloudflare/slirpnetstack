@@ -70,6 +70,12 @@ func proxyOneFlow(
 		buf    = make([]byte, MINPROXYBUFSIZE)
 	)
 
+	// For UDP sadly we need to allocate 64KiB per flow, because
+	// the packet may be fragmented.
+	if _, ok := out.(*KaUDPConn); ok {
+		buf = make([]byte, 64*1024)
+	}
+
 	for {
 		n, err := in.Read(buf[:])
 		if err != nil {
