@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 
-	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
@@ -112,7 +111,7 @@ func TcpRoutingHandler(state *State) func(*tcp.ForwarderRequest) {
 			return
 		}
 		r.Complete(false)
-		ep.SetSockOptBool(tcpip.DelayOption, false)
+		ep.SocketOptions().SetDelayOption(true)
 
 		xconn := gonet.NewTCPConn(&wq, ep)
 		conn := &GonetTCPConn{xconn, ep}

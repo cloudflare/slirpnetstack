@@ -78,20 +78,22 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	// Create the stack with ipv4 and tcp protocols, then add a tun-based
 	// NIC and ipv4 address.
 	opts := stack.Options{
-		NetworkProtocols: []stack.NetworkProtocol{
-			ipv4.NewProtocol(),
-			ipv6.NewProtocol(),
-			arp.NewProtocol()},
-		TransportProtocols: []stack.TransportProtocol{
-			tcp.NewProtocol(),
-			udp.NewProtocol(),
-			icmp.NewProtocol4(),
-			icmp.NewProtocol6()},
+		NetworkProtocols: []stack.NetworkProtocolFactory{
+			ipv4.NewProtocol,
+			ipv6.NewProtocol,
+			arp.NewProtocol},
+		TransportProtocols: []stack.TransportProtocolFactory{
+			tcp.NewProtocol,
+			udp.NewProtocol,
+			icmp.NewProtocol4,
+			icmp.NewProtocol6},
 		HandleLocal: false,
 	}
 
 	s := stack.New(opts)
-	s.SetForwarding(true)
+	s.SetForwarding(ipv4.ProtocolNumber, true)
+	s.SetForwarding(ipv6.ProtocolNumber, true)
+
 	{
 		opt := tcpip.TCPSACKEnabled(true)
 		s.SetTransportProtocolOption(tcp.ProtocolNumber, &opt)
@@ -144,9 +146,6 @@ func createNIC(s *stack.Stack, nic tcpip.NICID, linkEP stack.LinkEndpoint) error
 	}
 
 	s.SetSpoofing(nic, true)
-
-	// Assign L2 and L3 addresses
-	s.AddAddress(nic, arp.ProtocolNumber, arp.ProtocolAddress)
 
 	// In past we did s.AddAddressRange to assign 0.0.0.0/0 onto
 	// the interface. We need that to be able to terminate all the
@@ -242,7 +241,7 @@ type GonetTCPConn struct {
 }
 
 func (c *GonetTCPConn) SetTimeouts(kaInterval time.Duration, kaCount int) error {
-	c.ep.SetSockOptBool(tcpip.KeepaliveEnabledOption, true)
+	c.ep.SocketOptions().SetKeepAlive(true)
 	{
 		opt := tcpip.KeepaliveIdleOption(kaInterval)
 		c.ep.SetSockOpt(&opt)

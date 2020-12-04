@@ -212,3 +212,18 @@ Finally, to run standalone test:
     SLIRPNETSTACKBIN=./bin/slirpnetstack \
         unshare -Ur \
         python3 -m unittest tests.test_basic.RoutingTestSecurity.test_remote_srv
+
+
+Updating netstack/gvisor
+------------------------
+
+To update netstack dependency try running:
+
+    make update-gomod
+
+This sometimes works, but when it fails it's messy. In such case,
+clone `gvisor` repo, check out `origin/go` branch to get the
+golang-consumable code and point to it by adding this line to
+`go.mod`. This is useful in bisecting netstack issues:
+
+    replace gvisor.dev/gvisor => ../../src/gvisor
