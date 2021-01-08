@@ -90,8 +90,16 @@ func LocalForwardUDP(state *State, s *stack.Stack, rf FwdAddr, doneChannel <-cha
 				connectedUdp.closeOnWrite = true
 			}
 
+			// We cannot just pass buf to LocalForward()
+			// as it is called in a go routine, which
+			// could consume/read buf while next loop
+			// iteration (and current go routine) writes
+			// it with srv.ReadFrom(buf).
+			lfbuf := make([]byte, n)
+			copy(lfbuf, buf[:n])
+
 			go func() {
-				LocalForward(state, s, connectedUdp, targetAddr, buf[:n], rf.proxyProtocol)
+				LocalForward(state, s, connectedUdp, targetAddr, lfbuf, rf.proxyProtocol)
 			}()
 		}
 	}()
