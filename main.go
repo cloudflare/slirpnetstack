@@ -232,34 +232,15 @@ func Main(programName string, args []string) int {
 
 	s := NewStack(bufSize, bufSize)
 
-	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu)); err != nil {
-		fmt.Fprintf(os.Stderr, "[!] Failed to create linkEP: %s\n", err)
-		return -5
-	}
+	tcpHandler := TcpRoutingHandler(&state)
+	// Set sliding window auto-tuned value. Allow 10 concurrent
+	// new connection attempts.
+	fwdTcp := tcp.NewForwarder(s, 0, 10, tcpHandler)
+	s.SetTransportProtocolHandler(tcp.ProtocolNumber, fwdTcp.HandlePacket)
 
-	if pcapPath != "" {
-		pcapFile, err := os.OpenFile(pcapPath, os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[!] Failed to open PCAP file: %s\n", err)
-			return -6
-		}
-		if linkEP, err = sniffer.NewWithWriter(linkEP, pcapFile, uint32(mtu)); err != nil {
-			fmt.Fprintf(os.Stderr, "[!]Failed to sniff linkEP: %s\n", err)
-			return -7
-		}
-		defer pcapFile.Close()
-	}
-
-	if err = createNIC(s, 1, linkEP); err != nil {
-		fmt.Fprintf(os.Stderr, "[!] Failed to createNIC: %s\n", err)
-		return -8
-
-	}
-
-	StackRoutingSetup(s, 1, "10.0.2.2/24")
-	StackPrimeArp(s, 1, netParseIP("10.0.2.100"))
-
-	StackRoutingSetup(s, 1, "fd00::2/64")
+	udpHandler := UdpRoutingHandler(s, &state)
+	fwdUdp := udp.NewForwarder(s, udpHandler)
+	s.SetTransportProtocolHandler(udp.ProtocolNumber, fwdUdp.HandlePacket)
 
 	doneChannel := make(chan bool)
 
@@ -309,15 +290,34 @@ func Main(programName string, args []string) int {
 		}
 	}
 
-	tcpHandler := TcpRoutingHandler(&state)
-	// Set sliding window auto-tuned value. Allow 10 concurrent
-	// new connection attempts.
-	fwdTcp := tcp.NewForwarder(s, 0, 10, tcpHandler)
-	s.SetTransportProtocolHandler(tcp.ProtocolNumber, fwdTcp.HandlePacket)
+	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu)); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to create linkEP: %s\n", err)
+		return -5
+	}
 
-	udpHandler := UdpRoutingHandler(s, &state)
-	fwdUdp := udp.NewForwarder(s, udpHandler)
-	s.SetTransportProtocolHandler(udp.ProtocolNumber, fwdUdp.HandlePacket)
+	if pcapPath != "" {
+		pcapFile, err := os.OpenFile(pcapPath, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[!] Failed to open PCAP file: %s\n", err)
+			return -6
+		}
+		if linkEP, err = sniffer.NewWithWriter(linkEP, pcapFile, uint32(mtu)); err != nil {
+			fmt.Fprintf(os.Stderr, "[!]Failed to sniff linkEP: %s\n", err)
+			return -7
+		}
+		defer pcapFile.Close()
+	}
+
+	if err = createNIC(s, 1, linkEP); err != nil {
+		fmt.Fprintf(os.Stderr, "[!] Failed to createNIC: %s\n", err)
+		return -8
+
+	}
+
+	StackRoutingSetup(s, 1, "10.0.2.2/24")
+	StackPrimeArp(s, 1, netParseIP("10.0.2.100"))
+
+	StackRoutingSetup(s, 1, "fd00::2/64")
 
 	// [****] Finally, the mighty event loop, waiting on signals
 	pid := syscall.Getpid()
