@@ -717,9 +717,11 @@ class LocalForwardingPPTest(base.TestCase):
                               0,0,0xffff,0x01020304,
                               0,0,0xffff,0x04030201,
                               1,2)
-        s.sendall(sppheader + b"alamakota")
+        s.sendall(sppheader + b"alamakota" + b'x' * 65000)
         self.assertIn("local-fwd PP conn", p.stdout_line())
-        self.assertEqual(b"alamakota", s.recv(1024)[38:])
+        data = s.recv(64*1024)
+        self.assertEqual(b"alamakota", data[38:38+9])
+        self.assertEqual(65000+38+9, len(data))
         adr = read_log()
         self.assertIn("1.2.3.4", adr)
 
