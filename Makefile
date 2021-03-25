@@ -1,5 +1,5 @@
 export GOPRIVATE := code.cfops.it
-IMPORT_PATH := github.com/majek/slirpnetstack
+IMPORT_PATH := github.com/cloudflare/slirpnetstack
 
 VERSION := $(shell git describe --tags --always --dirty="-dev")
 DATE    := $(shell date -u '+%Y-%m-%d-%H:%MUTC')

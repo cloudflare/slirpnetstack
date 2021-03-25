@@ -1,4 +1,4 @@
-module github.com/majek/slirpnetstack
+module github.com/cloudflare/slirpnetstack
 
 go 1.13
 

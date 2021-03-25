@@ -14,7 +14,7 @@ import (
 	"github.com/opencontainers/runc/libcontainer/system"
 	"golang.org/x/sys/unix"
 
-	"github.com/majek/slirpnetstack/ext"
+	"github.com/cloudflare/slirpnetstack/ext"
 	"gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"

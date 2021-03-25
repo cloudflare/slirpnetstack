@@ -128,7 +128,7 @@ Perhaps a more powerful way is to see slirpnetstack in action with
 gvisor. To avoid docker magic we can use OCI gvisor interface. See the
 script:
 
-   - https://github.com/majek/slirpnetstack/blob/master/test-gvisor.sh
+   - https://github.com/cloudflare/slirpnetstack/blob/master/test-gvisor.sh
 
 Once you run it, you will see:
 
