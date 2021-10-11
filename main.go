@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -11,11 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/higebu/netfd"
 	"github.com/opencontainers/runc/libcontainer/system"
 	"golang.org/x/sys/unix"
 
 	"github.com/cloudflare/slirpnetstack/ext"
 	"gvisor.dev/gvisor/pkg/log"
+	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
@@ -24,6 +27,10 @@ import (
 
 var (
 	cmdVersion            bool
+	endpointType          string
+	sockProtocol          string
+	sockServerListen      string
+	sockClientConnect     string
 	fd                    int
 	netNsPath             string
 	ifName                string
@@ -41,12 +48,23 @@ var (
 	sourceIPv4            IPFlag
 	sourceIPv6            IPFlag
 	allowRange            IPPortRangeSlice
+	natRange4             string
+	natRange6             string
+	fwdDefault4           string
+	fwdDefault6           string
+	gwAddr4               string
+	gwAddr6               string
+	gwMacAddr             string
 	denyRange             IPPortRangeSlice
 	dnsTTL                time.Duration
 )
 
 func initFlagSet(flag *flag.FlagSet) {
 	flag.BoolVar(&cmdVersion, "version", false, "Print slirpnetstack version and exit")
+	flag.StringVar(&endpointType, "endpoint-type", "auto", "Endpoint type.\n[tap|sock-server|sock-client|fd]")
+	flag.StringVar(&sockProtocol, "sock-protocol", "unix", "Socket protocol.\nRefer to https://pkg.go.dev/net#Listen or https://pkg.go.dev/net#Dial\nDepends on endpoint-type: [sock-server|sock-client]")
+	flag.StringVar(&sockServerListen, "sock-server-listen", "/var/run/slirpnetstack-server.sock", "Socket server listen address.")
+	flag.StringVar(&sockClientConnect, "sock-client-connect", "/var/run/slirpnetstack-client.sock", "Socket client connect address.")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -62,6 +80,13 @@ func initFlagSet(flag *flag.FlagSet) {
 	flag.BoolVar(&enableInternetRouting, "enable-routing", false, "Allow guest connecting to non-local IP's that are likley to be routed to the internet")
 	flag.Var(&sourceIPv4, "source-ipv4", "When connecting, use the selected Source IP for ipv4")
 	flag.Var(&sourceIPv6, "source-ipv6", "When connecting, use the selected Source IP for ipv6")
+	flag.StringVar(&natRange4, "nat-ipv4", "10.0.2.0/24", "")
+	flag.StringVar(&natRange6, "nat-ipv6", "fd00::2/64", "")
+	flag.StringVar(&gwAddr4, "gw-ipv4", "10.0.2.2", "IPv4 NAT Gateway")
+	flag.StringVar(&gwAddr6, "gw-ipv6", "fd00::2", "IPv4 NAT Gateway")
+	flag.StringVar(&fwdDefault4, "fwd-default-ipv4", "10.0.2.100", "IPv4 NAT Gateway")
+	flag.StringVar(&fwdDefault6, "fwd-default-ipv6", "fd00::100", "IPv6 NAT Gateway")
+	flag.StringVar(&gwMacAddr, "gw-macaddr", "70:71:aa:4b:29:aa", "IPv6 NAT Gateway")
 	flag.Var(&allowRange, "allow", "When routing, allow specified IP prefix and port range")
 	flag.Var(&denyRange, "deny", "When routing, deny specified IP prefix and port range")
 	flag.DurationVar(&dnsTTL, "dns-ttl", time.Duration(5*time.Second), "For how long to cache DNS in case of dns labels passed to forward target.")
@@ -94,27 +119,6 @@ type State struct {
 }
 
 func Main(programName string, args []string) int {
-	var (
-		state   State
-		linkEP  stack.LinkEndpoint
-		tapMode bool             = true
-		mac     net.HardwareAddr = MustParseMAC("70:71:aa:4b:29:aa")
-		metrics *Metrics
-		err     error
-	)
-
-	sigCh := make(chan os.Signal, 4)
-	signal.Notify(sigCh, syscall.SIGINT)
-	signal.Notify(sigCh, syscall.SIGTERM)
-
-	for i := uint64(1024 * 1024); i > 0; i /= 2 {
-		rLimit := syscall.Rlimit{Max: i, Cur: i}
-		err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
-		if err == nil {
-			break
-		}
-	}
-
 	// Welcome to the golang flag parsing mess! We need to set our
 	// own flagset and not use the defaults because of how we
 	// handle the test coverage. You see, when running in coverage
@@ -135,6 +139,27 @@ func Main(programName string, args []string) int {
 		err := flagSet.Parse(args)
 		if err != nil {
 			return 2
+		}
+	}
+	var (
+		state   State
+		linkEP  stack.LinkEndpoint
+		tapMode bool             = true
+		mac     net.HardwareAddr = MustParseMAC(gwMacAddr)
+		metrics *Metrics
+		err     error
+	)
+
+	sigCh := make(chan os.Signal, 4)
+	errCh := make(chan error, 4)
+	signal.Notify(sigCh, syscall.SIGINT)
+	signal.Notify(sigCh, syscall.SIGTERM)
+
+	for i := uint64(1024 * 1024); i > 0; i /= 2 {
+		rLimit := syscall.Rlimit{Max: i, Cur: i}
+		err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+		if err == nil {
+			break
 		}
 	}
 
@@ -163,11 +188,11 @@ func Main(programName string, args []string) int {
 	localFwd.SetDefaultAddrs(
 		netParseIP("127.0.0.1"),
 		netParseIP("::1"),
-		netParseIP("10.0.2.100"),
-		netParseIP("fd00::100"))
+		netParseIP(fwdDefault4),
+		netParseIP(fwdDefault6))
 	remoteFwd.SetDefaultAddrs(
-		netParseIP("10.0.2.2"),
-		netParseIP("fd00::2"),
+		netParseIP(gwAddr4),
+		netParseIP(gwAddr6),
 		netParseIP("127.0.0.1"),
 		netParseIP("::1"))
 
@@ -179,7 +204,7 @@ func Main(programName string, args []string) int {
 	// or meaningless IP's.
 	state.StaticRoutingDeny = append(state.StaticRoutingDeny,
 		MustParseCIDR("0.0.0.0/8"),
-		MustParseCIDR("10.0.2.0/24"),
+		MustParseCIDR(natRange4),
 		MustParseCIDR("127.0.0.0/8"),
 		MustParseCIDR("255.255.255.255/32"),
 		MustParseCIDR("::/128"),
@@ -199,21 +224,72 @@ func Main(programName string, args []string) int {
 			return -2
 		}
 	}
-
-	if fd == -1 {
+	if endpointType == "auto" {
+		if fd >= 0 {
+			endpointType = "fd"
+		} else {
+			endpointType = "tap"
+		}
+	}
+	switch endpointType {
+	case "tap":
 		fd, tapMode, mtu, err = GetTunTap(netNsPath, ifName)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to open TUN/TAP: %s\n", err)
+			fmt.Fprintf(os.Stderr, "[!] Failed to open TUN/TAP: %s\n", err)
 			return -3
 		}
-	} else {
-		if netNsPath != "" {
-			fmt.Fprintf(os.Stderr, "Please specify either -fd or -netns\n")
+	case "sock-server":
+		server, err := net.Listen(sockProtocol, sockServerListen)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[!] sock-server: Failed to listen on %v:%v: %v\n", sockProtocol, sockServerListen, err)
+			return -11
+		}
+		fmt.Printf("[+] sock-server: Listen on %v:%v, waiting for connection...\n", sockProtocol, sockServerListen)
+		connCh := make(chan net.Conn)
+
+		go func(connCh chan net.Conn, errCh chan error) {
+			conn, err := server.Accept()
+			if err != nil {
+				errCh <- fmt.Errorf("Failed to accept connection from %v: %v", conn.RemoteAddr(), err)
+			} else {
+				connCh <- conn
+			}
+		}(connCh, errCh)
+		select {
+		case <-errCh:
+			fmt.Fprintf(os.Stderr, "[!] sock-server: %v\n", err)
+			server.Close()
+			return -12
+		case conn := <-connCh:
+			defer conn.Close()
+			fmt.Printf("[+] sock-server: Connection accepted from %v\n", conn.RemoteAddr())
+			fd = netfd.GetFdFromConn(conn)
+			server.Close() // Once connection accepted, server closed. slirpnetns can only serve one connection.
+		case sig := <-sigCh:
+			signal.Reset(sig)
+			fmt.Fprintf(os.Stderr, "[-] sock-server: Waiting canceled.\n")
+			server.Close()
+			return 0
+		}
+	case "sock-client":
+		client, err := net.Dial(sockProtocol, sockClientConnect)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[!] sock-client: Failed to connect to %v:%v: %v\n", sockProtocol, sockServerListen, err)
+			return -6
+		}
+		fmt.Printf("[+] sock-client: Connected to %v:%v\n", sockProtocol, sockClientConnect)
+		fd = netfd.GetFdFromConn(client)
+	case "fd":
+		if fd < 0 {
+			fmt.Fprintf(os.Stderr, "[!] Please specify the fd\n")
 			return -4
 		}
-		if mtu == 0 {
-			mtu = 1500
-		}
+	default:
+		fmt.Fprintf(os.Stderr, "[!] Unrecognized endpoint-type: %v\n", endpointType)
+		return -1
+	}
+	if mtu == 0 {
+		mtu = 1500
 	}
 
 	// This must be done after all the namespace dance, otherwise
@@ -290,7 +366,10 @@ func Main(programName string, args []string) int {
 		}
 	}
 
-	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu)); err != nil {
+	closeFunc := func(err tcpip.Error) {
+		errCh <- errors.New(fmt.Sprintf("Endpoint closed: %v", err))
+	}
+	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu), closeFunc); err != nil {
 		fmt.Fprintf(os.Stderr, "[!] Failed to create linkEP: %s\n", err)
 		return -5
 	}
@@ -314,10 +393,10 @@ func Main(programName string, args []string) int {
 
 	}
 
-	StackRoutingSetup(s, 1, "10.0.2.2/24")
-	StackPrimeArp(s, 1, netParseIP("10.0.2.100"))
+	StackRoutingSetup(s, 1, natRange4)
+	StackPrimeArp(s, 1, netParseIP(fwdDefault4))
 
-	StackRoutingSetup(s, 1, "fd00::2/64")
+	StackRoutingSetup(s, 1, natRange6)
 
 	// [****] Finally, the mighty event loop, waiting on signals
 	pid := syscall.Getpid()
@@ -326,9 +405,12 @@ func Main(programName string, args []string) int {
 
 	for {
 		select {
+		case err := <-errCh:
+			fmt.Fprintf(os.Stderr, "[!] #%d Slirpnetstack: Unexpected error: %v\n", pid, err)
+			goto stop
 		case sig := <-sigCh:
 			signal.Reset(sig)
-			fmt.Fprintf(os.Stderr, "[-] #%d Slirpnetstack closing\n", pid)
+			fmt.Fprintf(os.Stderr, "[-] #%d Slirpnetstack: Signal \"%v\" received, closing.\n", pid, sig.String())
 			goto stop
 		}
 	}

@@ -91,8 +91,8 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	}
 
 	s := stack.New(opts)
-	s.SetForwarding(ipv4.ProtocolNumber, true)
-	s.SetForwarding(ipv6.ProtocolNumber, true)
+	s.SetForwardingDefaultAndAllNICs(ipv4.ProtocolNumber, true)
+	s.SetForwardingDefaultAndAllNICs(ipv6.ProtocolNumber, true)
 
 	{
 		opt := tcpip.TCPSACKEnabled(true)
@@ -126,10 +126,11 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	return s
 }
 
-func createLinkEP(s *stack.Stack, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32) (stack.LinkEndpoint, error) {
+func createLinkEP(s *stack.Stack, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32, ClosedFunc func(tcpip.Error)) (stack.LinkEndpoint, error) {
 	parms := fdbased.Options{FDs: []int{tunFd},
 		MTU:               tapMtu,
 		RXChecksumOffload: true,
+		ClosedFunc:        ClosedFunc,
 	}
 	if tapMode {
 		parms.EthernetHeader = true
@@ -169,11 +170,23 @@ func StackRoutingSetup(s *stack.Stack, nic tcpip.NICID, assignNet string) {
 	if err != nil {
 		panic(fmt.Sprintf("Unable to ParseCIDR(%s): %s", assignNet, err))
 	}
-
+	PrefixLen, _ := ipNet.Mask.Size()
 	if ipAddr.To4() != nil {
-		s.AddAddress(nic, ipv4.ProtocolNumber, tcpip.Address(ipAddr.To4()))
+		s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
+			Protocol: ipv4.ProtocolNumber,
+			AddressWithPrefix: tcpip.AddressWithPrefix{
+				Address:   tcpip.Address(ipAddr.To4()),
+				PrefixLen: PrefixLen,
+			},
+		}, stack.AddressProperties{})
 	} else {
-		s.AddAddress(nic, ipv6.ProtocolNumber, tcpip.Address(ipAddr))
+		s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
+			Protocol: ipv6.ProtocolNumber,
+			AddressWithPrefix: tcpip.AddressWithPrefix{
+				Address:   tcpip.Address(ipAddr),
+				PrefixLen: PrefixLen,
+			},
+		}, stack.AddressProperties{})
 	}
 
 	rt := s.GetRouteTable()
@@ -220,11 +233,10 @@ func GonetDialTCP(s *stack.Stack, laddr, raddr *tcpip.FullAddress, network tcpip
 	defer wq.EventUnregister(&waitEntry)
 
 	err = ep.Connect(*raddr)
-	if err == tcpip.ErrConnectStarted {
+	if _, ok := err.(*tcpip.ErrConnectStarted); ok {
 		select {
 		case <-notifyCh:
 		}
-
 		err = ep.LastError()
 	}
 	if err != nil {

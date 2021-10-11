@@ -1,6 +1,7 @@
 .cover
 .GOPATH
 bin/*
+vendor/*
 *.pyc
 
 *~
