@@ -366,7 +366,7 @@ func Main(programName string, args []string) int {
 		}
 	}
 
-	closeFunc := func(err *tcpip.Error) {
+	closeFunc := func(err tcpip.Error) {
 		errCh <- errors.New(fmt.Sprintf("Endpoint closed: %v", err))
 	}
 	if linkEP, err = createLinkEP(s, fd, tapMode, mac, uint32(mtu), closeFunc); err != nil {
