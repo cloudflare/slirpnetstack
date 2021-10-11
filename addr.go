@@ -367,6 +367,9 @@ func (f *IPPortRangeSlice) String() string {
 }
 
 func (f *IPPortRangeSlice) Set(commaValue string) error {
+	if commaValue == "all" {
+		commaValue = "udp://0.0.0.0/0:0-65535,udp://[::]/0:0-65535,tcp://0.0.0.0/0:0-65535,tcp://[::]/0:0-65535"
+	}
 	for _, value := range strings.Split(commaValue, ",") {
 		network, rest := "", ""
 		p := strings.SplitN(value, "://", 2)

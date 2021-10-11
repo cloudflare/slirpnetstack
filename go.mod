@@ -7,6 +7,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/go-cmp v0.5.4 // indirect
+	github.com/higebu/netfd v0.0.0-20171006072739-15573c3bed1f
 	github.com/kr/text v0.2.0 // indirect
 	github.com/miekg/dns v1.1.35
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect

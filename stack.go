@@ -126,10 +126,11 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	return s
 }
 
-func createLinkEP(s *stack.Stack, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32) (stack.LinkEndpoint, error) {
+func createLinkEP(s *stack.Stack, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32, ClosedFunc func(*tcpip.Error)) (stack.LinkEndpoint, error) {
 	parms := fdbased.Options{FDs: []int{tunFd},
 		MTU:               tapMtu,
 		RXChecksumOffload: true,
+		ClosedFunc:        ClosedFunc,
 	}
 	if tapMode {
 		parms.EthernetHeader = true
