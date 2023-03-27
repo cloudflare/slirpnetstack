@@ -1,6 +1,7 @@
 from . import base
 from . import utils
 import os
+import shutil
 import socket
 import struct
 import unittest
@@ -50,10 +51,12 @@ class BasicTest(base.TestCase):
         caught_sizes = set()
         with open(pcap, 'rb') as f:
             data = f.read(24)
-            header = struct.unpack(">LHHLLLL", data)
+            endianness = "<" if struct.unpack("<L", data[0:4])[0] == 0xa1b2c3d4 else ">"
+            header = struct.unpack("%sLHHLLLL" % endianness, data)
+
             self.assertEqual(header[0], 0xa1b2c3d4)
             data = f.read(16)
-            (seconds, useconds, captured_length, packet_length) = struct.unpack(">LLLL", data)
+            (seconds, useconds, captured_length, packet_length) = struct.unpack("%sLLLL" % endianness, data)
             # we generally expect icmp echo request at 28 bytes, but
             # sometimes see some other packet at 76 bytes (arp?)
             caught_sizes.add( captured_length )
@@ -118,16 +121,20 @@ class BasicTest(base.TestCase):
         p = self.prun()
         self.assertStartSync(p)
         with self.guest_netns():
+            # ping6 may not be present on some systems.
+            ping_cmd = shutil.which("ping6")
+            if ping_cmd is None:
+                ping_cmd = "ping"
             # ping local address. sanity. This is kinda tricky. First,
             # tuntap must be enabled (ie: someone must pick up the
             # fd). Then the ip needs to have 'nodad' toggle, to
             # prevent it from stalling on duplicate address detection.
-            r = os.system("ping6 -q 2001:2::2 -c 1 -n > /dev/null")
+            r = os.system("%s -q 2001:2::2 -c 1 -n > /dev/null" % ping_cmd)
             self.assertEqual(r, 0)
-            r = os.system("ping6 -q 2001:2::100 -c 1 -n > /dev/null")
+            r = os.system("%s -q 2001:2::100 -c 1 -n > /dev/null" % ping_cmd)
             self.assertEqual(r, 0)
             # 1.1.1.1 resolver. Doesn't matter - will be terminated by netstack
-            r = os.system("ping6 -q 2606:4700:4700::1111 -c 1 -n > /dev/null")
+            r = os.system("%s -q 2606:4700:4700::1111 -c 1 -n > /dev/null" % ping_cmd)
             self.assertEqual(r, 0)
 
     def test_metric(self):
