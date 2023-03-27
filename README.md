@@ -197,7 +197,7 @@ Development
 
 You can run tests with:
 
-    make tests
+    make test
 
 Or tests with code coverage
 
