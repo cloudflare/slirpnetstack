@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -24,6 +25,7 @@ import (
 
 var (
 	cmdVersion            bool
+	cmdLicense            bool
 	fd                    int
 	netNsPath             string
 	ifName                string

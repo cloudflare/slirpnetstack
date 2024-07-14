@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
+	"gvisor.dev/gvisor/pkg/rawfile"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
-	"gvisor.dev/gvisor/pkg/tcpip/link/rawfile"
 	"gvisor.dev/gvisor/pkg/tcpip/link/tun"
 	"gvisor.dev/gvisor/pkg/tcpip/network/arp"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
@@ -157,7 +157,7 @@ func createNIC(s *stack.Stack, nic tcpip.NICID, linkEP stack.LinkEndpoint) error
 }
 
 func MustSubnet(ipNet *net.IPNet) *tcpip.Subnet {
-	subnet, errx := tcpip.NewSubnet(tcpip.Address(ipNet.IP), tcpip.AddressMask(ipNet.Mask))
+	subnet, errx := tcpip.NewSubnet(tcpip.AddrFromSlice(ipNet.IP), tcpip.MaskFromBytes(ipNet.Mask))
 	if errx != nil {
 		panic(fmt.Sprintf("Unable to MustSubnet(%s): %s", ipNet, errx))
 	}
@@ -173,12 +173,12 @@ func StackRoutingSetup(s *stack.Stack, nic tcpip.NICID, assignNet string) {
 	if ipAddr.To4() != nil {
 		s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
 			Protocol:          ipv4.ProtocolNumber,
-			AddressWithPrefix: tcpip.Address(ipAddr.To4()).WithPrefix(),
+			AddressWithPrefix: tcpip.AddrFromSlice(ipAddr.To4()).WithPrefix(),
 		}, stack.AddressProperties{})
 	} else {
 		s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
 			Protocol:          ipv6.ProtocolNumber,
-			AddressWithPrefix: tcpip.Address(ipAddr).WithPrefix(),
+			AddressWithPrefix: tcpip.AddrFromSlice(ipAddr).WithPrefix(),
 		}, stack.AddressProperties{})
 	}
 
@@ -195,8 +195,8 @@ func StackPrimeArp(s *stack.Stack, nic tcpip.NICID, ip net.IP) {
 	// address" on first write.
 	if ip.To4() != nil {
 		s.GetLinkAddress(nic,
-			tcpip.Address(ip.To4()),
-			"",
+			tcpip.AddrFromSlice(ip.To4()),
+			tcpip.AddrFromSlice([]byte{}),
 			ipv4.ProtocolNumber,
 			nil)
 	}

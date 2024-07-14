@@ -61,7 +61,7 @@ func UdpRoutingHandler(s *stack.Stack, state *State) func(*udp.ForwarderRequest)
 			}
 		}
 
-		xconn := gonet.NewUDPConn(s, &wq, ep)
+		xconn := gonet.NewUDPConn(&wq, ep)
 		conn := &KaUDPConn{Conn: xconn}
 
 		if rf != nil && rf.kaEnable && rf.kaInterval == 0 {
