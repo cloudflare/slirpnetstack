@@ -23,6 +23,9 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 )
 
+//go:embed LICENSE-BSD-Cloudflare
+var license string
+
 var (
 	cmdVersion            bool
 	cmdLicense            bool
@@ -50,6 +53,7 @@ var (
 
 func initFlagSet(flag *flag.FlagSet) {
 	flag.BoolVar(&cmdVersion, "version", false, "Print slirpnetstack version and exit")
+	flag.BoolVar(&cmdLicense, "license", false, "Print slirpnetstack license and exit")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -145,6 +149,11 @@ func Main(programName string, args []string) int {
 	if cmdVersion {
 		fmt.Printf("slirpnetstack version %s\n", ext.Version)
 		fmt.Printf("build time %s\n", ext.BuildTime)
+		return 0
+	}
+
+	if cmdLicense {
+		fmt.Printf("slirpnetstack license: %s\n", license)
 		return 0
 	}
 
