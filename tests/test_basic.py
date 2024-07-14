@@ -240,10 +240,12 @@ class RoutingTest(base.TestCase):
         self.assertStartSync(p)
         with self.guest_netns():
             s = utils.connect(port=echo_port, ip="192.168.1.100", udp=True)
-            a = s.send(b"a"*16385)
+            s.send(b"a"*16385)
             s.sendall(b"a"*(65535-28))
-            self.assertEqual(16385, len(s.recv(64*1024)))
-            self.assertEqual(65507, len(s.recv(64*1024)))
+            lengths = [16385, 65507]
+            while len(lengths) > 0:
+                data = s.recv(64*1024)
+                lengths.remove(len(data))
             s.close()
 
 
