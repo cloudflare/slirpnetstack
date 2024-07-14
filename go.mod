@@ -6,10 +6,10 @@ toolchain go1.22.4
 
 require (
 	github.com/miekg/dns v1.1.52
-	github.com/opencontainers/runc v1.1.4
+	github.com/opencontainers/runc v1.1.13
 	github.com/opencontainers/runtime-spec v1.1.0-rc.1
 	github.com/vishvananda/netlink v1.2.1-beta.2
-	golang.org/x/sys v0.17.0
+	golang.org/x/sys v0.19.0
 	gopkg.in/netaddr.v1 v1.5.1
 	gvisor.dev/gvisor v0.0.0-20240629121841-891b40cf7fe0
 )
@@ -24,8 +24,8 @@ require (
 	github.com/vishvananda/netns v0.0.4 // indirect
 	golang.org/x/exp v0.0.0-20230725093048-515e97ebf090 // indirect
 	golang.org/x/mod v0.14.0 // indirect
-	golang.org/x/net v0.20.0 // indirect
+	golang.org/x/net v0.24.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.16.1 // indirect
-	google.golang.org/protobuf v1.32.0 // indirect
+	google.golang.org/protobuf v1.34.2 // indirect
 )
