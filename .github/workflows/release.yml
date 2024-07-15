@@ -29,12 +29,6 @@ jobs:
       - name: Build
         run: make dist
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: bin-${{ github.ref_name }}
-          path: bin/*
-
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
