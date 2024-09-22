@@ -60,7 +60,7 @@ func netParseIP(h string) net.IP {
 	return ip
 }
 
-// Deferrred Address. Either just an ip, in which case 'static' is
+// Deferred Address. Either just an ip, in which case 'static' is
 // filled and we are done, or something we need to retrieve from DNS.
 type defAddress struct {
 	sync.Mutex
@@ -78,7 +78,7 @@ func ParseDefAddress(ipS string, portS string) (_da *defAddress, _err error) {
 	if ipS != "" {
 		if ip := netParseIP(ipS); ip != nil {
 			// ipS is an IP literal
-			da.static.Addr = tcpip.Address(ip)
+			da.static.Addr = tcpip.AddrFromSlice(ip)
 		} else {
 			// ipS is a hostname to resolve later
 			da.label = ipS
@@ -97,12 +97,6 @@ func ParseDefAddress(ipS string, portS string) (_da *defAddress, _err error) {
 	return da, nil
 }
 
-func (da *defAddress) SetDefaultAddr(a net.IP) {
-	if da.static.Addr == "" {
-		da.static.Addr = tcpip.Address(a)
-	}
-}
-
 func (da *defAddress) Retrieve() *tcpip.FullAddress {
 	da.Lock()
 	defer da.Unlock()
@@ -117,7 +111,7 @@ func (da *defAddress) Retrieve() *tcpip.FullAddress {
 		da.error = err
 		return nil
 	} else {
-		da.static.Addr = tcpip.Address(ip)
+		da.static.Addr = tcpip.AddrFromSlice(ip)
 		if port != 0 {
 			da.static.Port = uint16(port)
 		}
@@ -126,12 +120,18 @@ func (da *defAddress) Retrieve() *tcpip.FullAddress {
 	return &da.static
 }
 
+func (da *defAddress) SetDefaultAddr(a net.IP) {
+	if da.static.Addr.Len() == 0 {
+		da.static.Addr = tcpip.AddrFromSlice(a)
+	}
+}
+
 func (da *defAddress) String() string {
 	static := da.Retrieve()
 	if static == nil {
 		return fmt.Sprintf("%s-failed", da.label)
 	}
-	return fmt.Sprintf("%s:%d", net.IP(da.static.Addr).String(), da.static.Port)
+	return fmt.Sprintf("%s:%d", da.static.Addr.String(), da.static.Port)
 }
 
 func (da *defAddress) GetTCPAddr() *net.TCPAddr {
@@ -141,7 +141,7 @@ func (da *defAddress) GetTCPAddr() *net.TCPAddr {
 	}
 
 	return &net.TCPAddr{
-		IP:   net.IP(static.Addr),
+		IP:   static.Addr.AsSlice(),
 		Port: int(static.Port),
 	}
 }
@@ -153,7 +153,7 @@ func (da *defAddress) GetUDPAddr() *net.UDPAddr {
 	}
 
 	return &net.UDPAddr{
-		IP:   net.IP(static.Addr),
+		IP:   static.Addr.AsSlice(),
 		Port: int(static.Port),
 	}
 }

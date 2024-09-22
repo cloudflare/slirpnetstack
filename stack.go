@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
+	"gvisor.dev/gvisor/pkg/rawfile"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
-	"gvisor.dev/gvisor/pkg/tcpip/link/rawfile"
 	"gvisor.dev/gvisor/pkg/tcpip/link/tun"
 	"gvisor.dev/gvisor/pkg/tcpip/network/arp"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
@@ -91,8 +91,8 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	}
 
 	s := stack.New(opts)
-	s.SetForwarding(ipv4.ProtocolNumber, true)
-	s.SetForwarding(ipv6.ProtocolNumber, true)
+	s.SetForwardingDefaultAndAllNICs(ipv4.ProtocolNumber, true)
+	s.SetForwardingDefaultAndAllNICs(ipv6.ProtocolNumber, true)
 
 	{
 		opt := tcpip.TCPSACKEnabled(true)
@@ -157,7 +157,7 @@ func createNIC(s *stack.Stack, nic tcpip.NICID, linkEP stack.LinkEndpoint) error
 }
 
 func MustSubnet(ipNet *net.IPNet) *tcpip.Subnet {
-	subnet, errx := tcpip.NewSubnet(tcpip.Address(ipNet.IP), tcpip.AddressMask(ipNet.Mask))
+	subnet, errx := tcpip.NewSubnet(tcpip.AddrFromSlice(ipNet.IP), tcpip.MaskFromBytes(ipNet.Mask))
 	if errx != nil {
 		panic(fmt.Sprintf("Unable to MustSubnet(%s): %s", ipNet, errx))
 	}
@@ -171,9 +171,15 @@ func StackRoutingSetup(s *stack.Stack, nic tcpip.NICID, assignNet string) {
 	}
 
 	if ipAddr.To4() != nil {
-		s.AddAddress(nic, ipv4.ProtocolNumber, tcpip.Address(ipAddr.To4()))
+		s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
+			Protocol:          ipv4.ProtocolNumber,
+			AddressWithPrefix: tcpip.AddrFromSlice(ipAddr.To4()).WithPrefix(),
+		}, stack.AddressProperties{})
 	} else {
-		s.AddAddress(nic, ipv6.ProtocolNumber, tcpip.Address(ipAddr))
+		s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
+			Protocol:          ipv6.ProtocolNumber,
+			AddressWithPrefix: tcpip.AddrFromSlice(ipAddr).WithPrefix(),
+		}, stack.AddressProperties{})
 	}
 
 	rt := s.GetRouteTable()
@@ -189,8 +195,8 @@ func StackPrimeArp(s *stack.Stack, nic tcpip.NICID, ip net.IP) {
 	// address" on first write.
 	if ip.To4() != nil {
 		s.GetLinkAddress(nic,
-			tcpip.Address(ip.To4()),
-			"",
+			tcpip.AddrFromSlice(ip.To4()),
+			tcpip.AddrFromSlice([]byte{}),
 			ipv4.ProtocolNumber,
 			nil)
 	}
@@ -215,12 +221,12 @@ func GonetDialTCP(s *stack.Stack, laddr, raddr *tcpip.FullAddress, network tcpip
 	// Create wait queue entry that notifies a channel.
 	//
 	// We do this unconditionally as Connect will always return an error.
-	waitEntry, notifyCh := waiter.NewChannelEntry(nil)
-	wq.EventRegister(&waitEntry, waiter.EventOut)
+	waitEntry, notifyCh := waiter.NewChannelEntry(waiter.EventOut)
+	wq.EventRegister(&waitEntry)
 	defer wq.EventUnregister(&waitEntry)
 
 	err = ep.Connect(*raddr)
-	if err == tcpip.ErrConnectStarted {
+	if _, ok := err.(*tcpip.ErrConnectStarted); ok {
 		select {
 		case <-notifyCh:
 		}

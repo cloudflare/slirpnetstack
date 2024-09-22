@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -22,8 +23,12 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 )
 
+//go:embed LICENSE-BSD-Cloudflare
+var license string
+
 var (
 	cmdVersion            bool
+	cmdLicense            bool
 	fd                    int
 	netNsPath             string
 	ifName                string
@@ -43,10 +48,12 @@ var (
 	allowRange            IPPortRangeSlice
 	denyRange             IPPortRangeSlice
 	dnsTTL                time.Duration
+	readyFile             string
 )
 
 func initFlagSet(flag *flag.FlagSet) {
 	flag.BoolVar(&cmdVersion, "version", false, "Print slirpnetstack version and exit")
+	flag.BoolVar(&cmdLicense, "license", false, "Print slirpnetstack license and exit")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -65,6 +72,7 @@ func initFlagSet(flag *flag.FlagSet) {
 	flag.Var(&allowRange, "allow", "When routing, allow specified IP prefix and port range")
 	flag.Var(&denyRange, "deny", "When routing, deny specified IP prefix and port range")
 	flag.DurationVar(&dnsTTL, "dns-ttl", time.Duration(5*time.Second), "For how long to cache DNS in case of dns labels passed to forward target.")
+	flag.StringVar(&readyFile, "ready-file", "", "After initialization, write a byte to this file to signal readiness")
 }
 
 func main() {
@@ -141,6 +149,11 @@ func Main(programName string, args []string) int {
 	if cmdVersion {
 		fmt.Printf("slirpnetstack version %s\n", ext.Version)
 		fmt.Printf("build time %s\n", ext.BuildTime)
+		return 0
+	}
+
+	if cmdLicense {
+		fmt.Printf("slirpnetstack license: %s\n", license)
 		return 0
 	}
 
@@ -323,6 +336,21 @@ func Main(programName string, args []string) int {
 	pid := syscall.Getpid()
 	fmt.Fprintf(os.Stderr, "[+] #%d Slirpnetstack started\n", pid)
 	syscall.Kill(syscall.Getppid(), syscall.SIGWINCH)
+
+	if readyFile != "" {
+		file, err := os.OpenFile(readyFile, os.O_WRONLY, 0)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[!] Failed to open readiness file: %s\n", err)
+			return -11
+		}
+		_, err = file.Write([]byte{1})
+		if err != nil {
+			_ = file.Close()
+			fmt.Fprintf(os.Stderr, "[!] Failed to write byte to readiness file: %s\n", err)
+			return -12
+		}
+		_ = file.Close()
+	}
 
 	for {
 		select {

@@ -10,21 +10,22 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip"
 )
 
-/* SSH supports this syntax:
+/*
+	SSH supports this syntax:
+
 -R ... connections to given TCP port ... on the remote host are to be forwarded to the local side...
 -L ... on the local host are to be forwarded to the given port... on the remote side...
 
-  -L [bind_address:]port:host:hostport
-  -R [bind_address:]port:host:hostport
-  -R [bind_address:]port
+	-L [bind_address:]port:host:hostport
+	-R [bind_address:]port:host:hostport
+	-R [bind_address:]port
 
-  -L [bind_address:]port:remote_socket
-  -L local_socket:remote_socket
-  -L local_socket:host:hostport
-  -R [bind_address:]port:local_socket
-  -R remote_socket:host:hostport
-  -R remote_socket:local_socket
-
+	-L [bind_address:]port:remote_socket
+	-L local_socket:remote_socket
+	-L local_socket:host:hostport
+	-R [bind_address:]port:local_socket
+	-R remote_socket:host:hostport
+	-R remote_socket:local_socket
 */
 type FwdAddr struct {
 	network       string
@@ -133,8 +134,7 @@ func (f *FwdAddrSlice) Set(value string) error {
 func (f *FwdAddrSlice) SetDefaultAddrs(bindAddrDef net.IP, bindAddr6Def net.IP, hostAddrDef net.IP, hostAddr6Def net.IP) {
 	for i := range *f {
 		fa := &(*f)[i]
-		if (fa.bind.static.Addr != "" && fa.bind.static.Addr.To4() == "") ||
-			(fa.host.static.Addr != "" && fa.host.static.Addr.To4() == "") {
+		if fa.bind.static.Addr.Len() == 16 || fa.host.static.Addr.Len() == 16 {
 			// Bind and/or host is IPv6
 			fa.bind.SetDefaultAddr(bindAddr6Def)
 			fa.host.SetDefaultAddr(hostAddr6Def)
@@ -182,16 +182,24 @@ func (f *FwdAddr) HostAddr() (net.Addr, error) {
 	return nil, fmt.Errorf("unknown network type: %v", f.network)
 }
 
+func ipToSmallestSlice(ip net.IP) []byte {
+	ip4 := ip.To4()
+	if ip4 != nil {
+		return ip4
+	}
+	return ip
+}
+
 func FullAddressFromAddr(a net.Addr) *tcpip.FullAddress {
 	switch v := a.(type) {
 	case *net.TCPAddr:
 		return &tcpip.FullAddress{
-			Addr: tcpip.Address(v.IP),
+			Addr: tcpip.AddrFromSlice(ipToSmallestSlice(v.IP)),
 			Port: uint16(v.Port),
 		}
 	case *net.UDPAddr:
 		return &tcpip.FullAddress{
-			Addr: tcpip.Address(v.IP),
+			Addr: tcpip.AddrFromSlice(ipToSmallestSlice(v.IP)),
 			Port: uint16(v.Port),
 		}
 	}
@@ -233,6 +241,7 @@ func netAddrSetPort(a net.Addr, port int) net.Addr {
 }
 
 // Addr that can be set from flag.Var. For example:
+//
 //	flag.Var(&metricAddr, "m", "Metrics address")
 type AddrFlags struct {
 	net.Addr
