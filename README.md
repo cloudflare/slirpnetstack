@@ -118,7 +118,8 @@ Alternatively you can use "lsns" from host:
 
 Now you can run slirpnetstack:
 
-    sudo ./bin/slirpnetstack -interface tun0 -netns /proc/31530/ns/net
+    nsenter --user=/proc/31530/ns/user --preserve-credentials
+    ./bin/slirpnetstack -interface tun0 -netns /proc/31530/ns/net
 
 
 Usage with gvisor
