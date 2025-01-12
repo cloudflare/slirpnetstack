@@ -1,9 +1,18 @@
+BINARY := slirpnetstack
+
 export GOPRIVATE := code.cfops.it
 IMPORT_PATH := github.com/cloudflare/slirpnetstack
 
-VERSION := $(shell git describe --tags --always --dirty="-dev")
-DATE    := $(shell date -u '+%Y-%m-%d-%H:%MUTC')
-GOFLAGS := -ldflags='-compressdwarf=false -X "$(IMPORT_PATH)/ext.Version=$(VERSION)" -X "$(IMPORT_PATH)/ext.BuildTime=$(DATE)"'
+VERSION   := $(shell git describe --tags --always --dirty="-dev")
+DATE      := $(shell date -u '+%Y-%m-%d-%H:%MUTC')
+GOFLAGS   := -ldflags='-X "$(IMPORT_PATH)/ext.Version=$(VERSION)" -X "$(IMPORT_PATH)/ext.BuildTime=$(DATE)"'
+BUILD_DIR := bin
+
+GO_BUILD = go build $(GOFLAGS)
+
+LINUX_ARCH_LIST = \
+	linux-amd64 \
+	linux-arm64
 
 bin/slirpnetstack: *.go go.mod
 	go build \
@@ -80,3 +89,13 @@ update-gomod:
 	go get -u gvisor.dev/gvisor@go all
 	go mod tidy
 	$(MAKE) bin/gocovmerge bin/slirpnetstack bin/slirpnetstack.cover
+
+
+### Distribution section ###
+dist: $(LINUX_ARCH_LIST)
+
+linux-amd64:
+	GOARCH=amd64 GOOS=linux $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY)-$@
+
+linux-arm64:
+	GOARCH=arm64 GOOS=linux $(GO_BUILD) -o $(BUILD_DIR)/$(BINARY)-$@

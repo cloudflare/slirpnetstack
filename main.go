@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -22,8 +23,12 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 )
 
+//go:embed LICENSE-BSD-Cloudflare
+var license string
+
 var (
 	cmdVersion            bool
+	cmdLicense            bool
 	fd                    int
 	netNsPath             string
 	ifName                string
@@ -43,10 +48,13 @@ var (
 	allowRange            IPPortRangeSlice
 	denyRange             IPPortRangeSlice
 	dnsTTL                time.Duration
+	readyFile             string
+	fwmark                int
 )
 
 func initFlagSet(flag *flag.FlagSet) {
 	flag.BoolVar(&cmdVersion, "version", false, "Print slirpnetstack version and exit")
+	flag.BoolVar(&cmdLicense, "license", false, "Print slirpnetstack license and exit")
 	flag.IntVar(&fd, "fd", -1, "Unix datagram socket file descriptor")
 	flag.StringVar(&netNsPath, "netns", "", "path to network namespace")
 	flag.StringVar(&ifName, "interface", "tun0", "interface name within netns")
@@ -65,6 +73,8 @@ func initFlagSet(flag *flag.FlagSet) {
 	flag.Var(&allowRange, "allow", "When routing, allow specified IP prefix and port range")
 	flag.Var(&denyRange, "deny", "When routing, deny specified IP prefix and port range")
 	flag.DurationVar(&dnsTTL, "dns-ttl", time.Duration(5*time.Second), "For how long to cache DNS in case of dns labels passed to forward target.")
+	flag.StringVar(&readyFile, "ready-file", "", "After initialization, write a byte to this file to signal readiness")
+	flag.IntVar(&fwmark, "fwmark", 0, "Set fwmark on outbound packets")
 }
 
 func main() {
@@ -91,6 +101,8 @@ type State struct {
 	denyRange             IPPortRangeSlice
 
 	srcIPs SrcIPs
+
+	fwmark int
 }
 
 func Main(programName string, args []string) int {
@@ -144,6 +156,11 @@ func Main(programName string, args []string) int {
 		return 0
 	}
 
+	if cmdLicense {
+		fmt.Printf("slirpnetstack license: %s\n", license)
+		return 0
+	}
+
 	if gomaxprocs > 0 {
 		runtime.GOMAXPROCS(gomaxprocs)
 	}
@@ -157,6 +174,7 @@ func Main(programName string, args []string) int {
 	state.srcIPs.srcIPv6 = sourceIPv6.ip
 	state.allowRange = allowRange
 	state.denyRange = denyRange
+	state.fwmark = fwmark
 
 	logConnections = !quiet
 
@@ -324,13 +342,26 @@ func Main(programName string, args []string) int {
 	fmt.Fprintf(os.Stderr, "[+] #%d Slirpnetstack started\n", pid)
 	syscall.Kill(syscall.Getppid(), syscall.SIGWINCH)
 
-	for {
-		select {
-		case sig := <-sigCh:
-			signal.Reset(sig)
-			fmt.Fprintf(os.Stderr, "[-] #%d Slirpnetstack closing\n", pid)
-			goto stop
+	if readyFile != "" {
+		file, err := os.OpenFile(readyFile, os.O_WRONLY, 0)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[!] Failed to open readiness file: %s\n", err)
+			return -11
 		}
+		_, err = file.Write([]byte{1})
+		if err != nil {
+			_ = file.Close()
+			fmt.Fprintf(os.Stderr, "[!] Failed to write byte to readiness file: %s\n", err)
+			return -12
+		}
+		_ = file.Close()
+	}
+
+	for {
+		sig := <-sigCh
+		signal.Reset(sig)
+		fmt.Fprintf(os.Stderr, "[-] #%d Slirpnetstack closing\n", pid)
+		goto stop
 	}
 stop:
 	// TODO: define semantics of graceful close on signal

@@ -155,7 +155,7 @@ func LocalForward(state *State, s *stack.Stack, conn KaConn, targetAddr net.Addr
 		// connection had routable IP (unlike
 		// 127.0.0.1)... well... spoof it! The client might find it
 		// useful who launched the connection in the first place.
-		if proxyProtocol == false {
+		if !proxyProtocol {
 			srcIP = conn.RemoteAddr()
 		} else {
 			ppPrefix = "PP "
@@ -163,8 +163,8 @@ func LocalForward(state *State, s *stack.Stack, conn KaConn, targetAddr net.Addr
 		}
 		// If the source IP as reported by PP or the client is not routable, still forward
 		// connection. Just don't use/leak the original IP.
-		var isSourcev4 = FullAddressFromAddr(srcIP).Addr.To4() != ""
-		var isTargetv4 = FullAddressFromAddr(targetAddr).Addr.To4() != ""
+		var isSourcev4 = FullAddressFromAddr(srcIP).Addr.Len() == 4
+		var isTargetv4 = FullAddressFromAddr(targetAddr).Addr.Len() == 4
 		if IPNetContains(state.StaticRoutingDeny, netAddrIP(srcIP)) || isSourcev4 != isTargetv4 {
 			// Source IP not rewritten because:
 			//   * static routing deny
@@ -251,5 +251,4 @@ pperror:
 			err)
 	}
 	conn.Close()
-	return
 }

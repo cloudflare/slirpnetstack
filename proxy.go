@@ -154,7 +154,7 @@ func connSplice(local KaConn, remote KaConn, sppHeader []byte) ProxyError {
 	proxyOneFlow(remote, local, &pe.RemoteRead,
 		&pe.LocalWrite, doneCh, 1, sppHeader)
 	first := <-doneCh
-	_ = <-doneCh
+	<-doneCh
 	switch {
 	case first == 0 && pe.LocalRead != nil:
 		pe.First = 0

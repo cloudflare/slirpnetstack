@@ -1,11 +1,12 @@
 package main
 
 import (
-	"golang.org/x/sys/unix"
 	"net"
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 type KaConn interface {
@@ -92,7 +93,7 @@ func (c *KaUDPConn) Read(buf []byte) (int, error) {
 	c.Conn.SetReadDeadline(t)
 
 	n, err := c.Conn.Read(buf)
-	if ne, ok := err.(net.Error); ok == true && ne.Timeout() {
+	if ne, ok := err.(net.Error); ok && ne.Timeout() {
 		// On Keepalive raise special error
 		return 0, &UDPKeepAliveError{err}
 	} else {
