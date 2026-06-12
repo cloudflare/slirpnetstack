@@ -1,4 +1,4 @@
-package main
+package slirpnetstack
 
 import (
 	"context"
@@ -29,6 +29,40 @@ func MustParseCIDR(n string) *net.IPNet {
 	return r
 }
 
+// reconcileGateway keeps the NAT gateway address and the interface NAT range in
+// sync. The host part of natRange is the interface address, which is exactly
+// the gateway the guest talks to, so the two must always agree.
+//
+// If gwAddr is empty it is derived from the host part of natRange. If gwAddr is
+// set it overrides that host part (keeping natRange's prefix length) and must
+// fall within natRange's subnet, otherwise an error is returned. It returns the
+// reconciled (natRange, gwAddr) pair.
+func reconcileGateway(natRange, gwAddr string) (string, string, error) {
+	ip, ipNet, err := net.ParseCIDR(natRange)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid nat range %q: %s", natRange, err)
+	}
+	prefixLen, _ := ipNet.Mask.Size()
+
+	if gwAddr == "" {
+		// Not provided: derive the gateway from the host part of natRange.
+		gwAddr = ip.String()
+	} else {
+		// Provided: overrides natRange's host part, but must stay within
+		// the subnet.
+		gwIP := NetParseIP(gwAddr)
+		if gwIP == nil {
+			return "", "", fmt.Errorf("invalid gateway address %q", gwAddr)
+		}
+		if !ipNet.Contains(gwIP) {
+			return "", "", fmt.Errorf("gateway %s is outside nat range %s", gwAddr, ipNet)
+		}
+		gwAddr = gwIP.String()
+	}
+
+	return fmt.Sprintf("%s/%d", gwAddr, prefixLen), gwAddr, nil
+}
+
 func MustParseMAC(m string) net.HardwareAddr {
 	mac, err := net.ParseMAC(m)
 	if err != nil {
@@ -49,7 +83,7 @@ func SetResetOnClose(conn net.Conn) {
 // The problem with standard net.ParseIP is that it can return
 // ::ffff:x.x.x.x IPv4-mapped address. We don't like the lack of
 // uniformity.
-func netParseIP(h string) net.IP {
+func NetParseIP(h string) net.IP {
 	ip := net.ParseIP(h)
 	if ip == nil {
 		return nil
@@ -76,9 +110,9 @@ type defAddress struct {
 func ParseDefAddress(ipS string, portS string) (_da *defAddress, _err error) {
 	da := &defAddress{}
 	if ipS != "" {
-		if ip := netParseIP(ipS); ip != nil {
+		if ip := NetParseIP(ipS); ip != nil {
 			// ipS is an IP literal
-			da.static.Addr = tcpip.Address(ip)
+			da.static.Addr = tcpip.AddrFromSlice(ip)
 		} else {
 			// ipS is a hostname to resolve later
 			da.label = ipS
@@ -98,8 +132,8 @@ func ParseDefAddress(ipS string, portS string) (_da *defAddress, _err error) {
 }
 
 func (da *defAddress) SetDefaultAddr(a net.IP) {
-	if da.static.Addr == "" {
-		da.static.Addr = tcpip.Address(a)
+	if da.static.Addr.Len() == 0 {
+		da.static.Addr = tcpip.AddrFromSlice(a)
 	}
 }
 
@@ -117,7 +151,7 @@ func (da *defAddress) Retrieve() *tcpip.FullAddress {
 		da.error = err
 		return nil
 	} else {
-		da.static.Addr = tcpip.Address(ip)
+		da.static.Addr = tcpip.AddrFromSlice(ip)
 		if port != 0 {
 			da.static.Port = uint16(port)
 		}
@@ -131,7 +165,7 @@ func (da *defAddress) String() string {
 	if static == nil {
 		return fmt.Sprintf("%s-failed", da.label)
 	}
-	return fmt.Sprintf("%s:%d", net.IP(da.static.Addr).String(), da.static.Port)
+	return fmt.Sprintf("%s:%d", net.IP(da.static.Addr.AsSlice()).String(), da.static.Port)
 }
 
 func (da *defAddress) GetTCPAddr() *net.TCPAddr {
@@ -141,7 +175,7 @@ func (da *defAddress) GetTCPAddr() *net.TCPAddr {
 	}
 
 	return &net.TCPAddr{
-		IP:   net.IP(static.Addr),
+		IP:   net.IP(static.Addr.AsSlice()),
 		Port: int(static.Port),
 	}
 }
@@ -153,7 +187,7 @@ func (da *defAddress) GetUDPAddr() *net.UDPAddr {
 	}
 
 	return &net.UDPAddr{
-		IP:   net.IP(static.Addr),
+		IP:   net.IP(static.Addr.AsSlice()),
 		Port: int(static.Port),
 	}
 }
@@ -170,13 +204,13 @@ func simpleLookupHost(resolver *net.Resolver, label string) (net.IP, error) {
 
 	// prefer IPv4. No real reason.
 	for _, addr := range addrs {
-		ip := netParseIP(addr)
+		ip := NetParseIP(addr)
 		if ip.To4() != nil {
 			return ip.To4(), nil
 		}
 	}
 
-	ip := netParseIP(addrs[0])
+	ip := NetParseIP(addrs[0])
 	if ip == nil {
 		return nil, fmt.Errorf("Empty dns reponse for %q", label)
 	}
@@ -236,7 +270,7 @@ func FullResolve(label string) (net.IP, uint16, error) {
 }
 
 func netParseOrResolveIP(h string) (_ip net.IP, _resolved bool, _err error) {
-	ip := netParseIP(h)
+	ip := NetParseIP(h)
 	if ip != nil {
 		return ip, false, nil
 	}

@@ -58,7 +58,14 @@ Non-features of slirpnetstack
 
 Broken things:
 
- - ping - icmp echo request - are terminated locally.
+ - ping - icmp echo requests - to the gateway addresses are terminated
+   locally. Other destinations are relayed to the real network with
+   unprivileged SOCK_DGRAM ICMP sockets, subject to the same routing
+   firewall as tcp/udp, with TTL relayed so that ping and traceroute
+   work. This needs the host gid to be within the
+   `net.ipv4.ping_group_range` sysctl (it gates ICMPv6 too); otherwise
+   the guest receives an ICMP administratively-prohibited error from
+   the gateway.
  - udp requires connection tracking, therefore is hard to do in
    general. Timeouts are arbitrary.
  - gvisor/netstack has some implementation issues, so of course this

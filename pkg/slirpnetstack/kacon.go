@@ -1,4 +1,4 @@
-package main
+package slirpnetstack
 
 import (
 	"golang.org/x/sys/unix"

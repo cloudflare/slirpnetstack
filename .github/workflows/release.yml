@@ -1,0 +1,66 @@
+name: Release
+
+# Build static binaries and publish a GitHub Release whenever a version tag is
+# pushed, e.g.:
+#     git tag v1.2.3 && git push origin v1.2.3
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # required to create the release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history + tags so `git describe --tags` resolves the version
+          # the same way the Makefile does.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Unit tests
+        run: go test ./...
+
+      - name: Build static binaries
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+        run: |
+          set -euo pipefail
+          import_path=github.com/KusakabeShi/slirpnetstack
+          version="$(git describe --tags --always --dirty="-dev")"
+          date="$(date -u '+%Y-%m-%d-%H:%MUTC')"
+          ldflags="-s -w -X ${import_path}/ext.Version=${version} -X ${import_path}/ext.BuildTime=${date}"
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            echo "building linux/${arch} (${version})"
+            GOARCH="${arch}" go build -trimpath -ldflags "${ldflags}" \
+              -o "dist/slirpnetstack-linux-${arch}" .
+          done
+          ( cd dist && sha256sum slirpnetstack-linux-* > SHA256SUMS )
+          ls -l dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Mark tags like v1.2.3-rc1 as pre-releases.
+          prerelease=""
+          case "${GITHUB_REF_NAME}" in
+            *-*) prerelease="--prerelease" ;;
+          esac
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            ${prerelease}

@@ -1,6 +1,6 @@
 // +build testrunmain
 
-package main
+package slirpnetstack
 
 import (
 	"flag"

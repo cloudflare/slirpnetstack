@@ -1,4 +1,4 @@
-package main
+package slirpnetstack
 
 import (
 	"fmt"
@@ -163,8 +163,8 @@ func LocalForward(state *State, s *stack.Stack, conn KaConn, targetAddr net.Addr
 		}
 		// If the source IP as reported by PP or the client is not routable, still forward
 		// connection. Just don't use/leak the original IP.
-		var isSourcev4 = FullAddressFromAddr(srcIP).Addr.To4() != ""
-		var isTargetv4 = FullAddressFromAddr(targetAddr).Addr.To4() != ""
+		var isSourcev4 = FullAddressFromAddr(srcIP).Addr.To4().Len() != 0
+		var isTargetv4 = FullAddressFromAddr(targetAddr).Addr.To4().Len() != 0
 		if IPNetContains(state.StaticRoutingDeny, netAddrIP(srcIP)) || isSourcev4 != isTargetv4 {
 			// Source IP not rewritten because:
 			//   * static routing deny

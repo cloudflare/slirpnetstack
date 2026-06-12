@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cloudflare/slirpnetstack/unconn"
+	"github.com/KusakabeShi/slirpnetstack/unconn"
 )
 
 func main() {

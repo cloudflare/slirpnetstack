@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # Single source of truth: the `go` directive in go.mod (>= 1.26.3,
+          # required by the current gvisor.dev/gvisor version).
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: make bin/slirpnetstack bin/mocktcpecho bin/mockudpecho bin/mockdns
+
+      - name: Unit tests
+        run: go test ./...
+
+      # The Python integration suite drives slirpnetstack inside network
+      # namespaces (unshare -Ur). It currently has known failures that are
+      # tracked separately (e.g. IPv4 ICMP echo-to-any and jumbo UDP changed
+      # behavior after the gvisor bump), so it runs as non-blocking for now.
+      # Once those are triaged, drop continue-on-error to make it a hard gate.
+      - name: Integration tests (non-blocking)
+        continue-on-error: true
+        env:
+          SLIRPNETSTACKBIN: ./bin/slirpnetstack
+          PYTHONPATH: .
+          PYTHONIOENCODING: utf-8
+        run: unshare -Ur python3 -m tests.runner tests

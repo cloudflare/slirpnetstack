@@ -1,32 +1,31 @@
-export GOPRIVATE := code.cfops.it
-IMPORT_PATH := github.com/cloudflare/slirpnetstack
+IMPORT_PATH := github.com/KusakabeShi/slirpnetstack
 
 VERSION := $(shell git describe --tags --always --dirty="-dev")
 DATE    := $(shell date -u '+%Y-%m-%d-%H:%MUTC')
 GOFLAGS := -ldflags='-compressdwarf=false -X "$(IMPORT_PATH)/ext.Version=$(VERSION)" -X "$(IMPORT_PATH)/ext.BuildTime=$(DATE)"'
 
-bin/slirpnetstack: *.go go.mod
+bin/slirpnetstack: main.go pkg/slirpnetstack/*.go go.mod
 	go build \
 		$(GOFLAGS) \
 		-o $@ \
 		$(IMPORT_PATH)
 
 
-bin/slirpnetstack.cover: *.go go.mod
+bin/slirpnetstack.cover: main.go pkg/slirpnetstack/*.go go.mod
 	go test \
 		$(GOFLAGS) \
-		-coverpkg="$(IMPORT_PATH)" \
+		-coverpkg="$(IMPORT_PATH)/pkg/slirpnetstack" \
 		-c \
 		-o $@ \
 		-tags testrunmain \
-		$(IMPORT_PATH)
+		$(IMPORT_PATH)/pkg/slirpnetstack
 
 bin/gocovmerge:
 	go build -o $@ github.com/wadey/gocovmerge
 
 .PHONY: format
 format:
-	go fmt *go
+	go fmt ./...
 
 ifdef COVER
 PWD:=$(CURDIR)

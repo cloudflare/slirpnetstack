@@ -1,4 +1,4 @@
-package main
+package slirpnetstack
 
 import (
 	"errors"
@@ -7,10 +7,11 @@ import (
 	"os"
 	"time"
 
+	"gvisor.dev/gvisor/pkg/rawfile"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
-	"gvisor.dev/gvisor/pkg/tcpip/link/rawfile"
 	"gvisor.dev/gvisor/pkg/tcpip/link/tun"
 	"gvisor.dev/gvisor/pkg/tcpip/network/arp"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
@@ -91,8 +92,8 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	}
 
 	s := stack.New(opts)
-	s.SetForwarding(ipv4.ProtocolNumber, true)
-	s.SetForwarding(ipv6.ProtocolNumber, true)
+	s.SetForwardingDefaultAndAllNICs(ipv4.ProtocolNumber, true)
+	s.SetForwardingDefaultAndAllNICs(ipv6.ProtocolNumber, true)
 
 	{
 		opt := tcpip.TCPSACKEnabled(true)
@@ -126,10 +127,11 @@ func NewStack(rcvBufferSize, sndBufferSize int) *stack.Stack {
 	return s
 }
 
-func createLinkEP(s *stack.Stack, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32) (stack.LinkEndpoint, error) {
+func createLinkEP(s *stack.Stack, tunFd int, tapMode bool, macAddress net.HardwareAddr, tapMtu uint32, ClosedFunc func(tcpip.Error)) (stack.LinkEndpoint, error) {
 	parms := fdbased.Options{FDs: []int{tunFd},
 		MTU:               tapMtu,
 		RXChecksumOffload: true,
+		ClosedFunc:        ClosedFunc,
 	}
 	if tapMode {
 		parms.EthernetHeader = true
@@ -139,9 +141,9 @@ func createLinkEP(s *stack.Stack, tunFd int, tapMode bool, macAddress net.Hardwa
 	return fdbased.New(&parms)
 }
 
-func createNIC(s *stack.Stack, nic tcpip.NICID, linkEP stack.LinkEndpoint) error {
+func CreateNIC(s *stack.Stack, nic tcpip.NICID, linkEP stack.LinkEndpoint) error {
 	if err := s.CreateNIC(nic, linkEP); err != nil {
-		fmt.Fprintf(os.Stderr, "[!] CreateNIC(%s) = %s\n", ifName, err)
+		fmt.Fprintf(os.Stderr, "[!] CreateNIC(%d) = %s\n", nic, err)
 		return fmt.Errorf("%s", err)
 	}
 
@@ -157,7 +159,7 @@ func createNIC(s *stack.Stack, nic tcpip.NICID, linkEP stack.LinkEndpoint) error
 }
 
 func MustSubnet(ipNet *net.IPNet) *tcpip.Subnet {
-	subnet, errx := tcpip.NewSubnet(tcpip.Address(ipNet.IP), tcpip.AddressMask(ipNet.Mask))
+	subnet, errx := tcpip.NewSubnet(tcpip.AddrFromSlice(ipNet.IP), tcpip.MaskFromBytes(ipNet.Mask))
 	if errx != nil {
 		panic(fmt.Sprintf("Unable to MustSubnet(%s): %s", ipNet, errx))
 	}
@@ -169,11 +171,23 @@ func StackRoutingSetup(s *stack.Stack, nic tcpip.NICID, assignNet string) {
 	if err != nil {
 		panic(fmt.Sprintf("Unable to ParseCIDR(%s): %s", assignNet, err))
 	}
-
+	PrefixLen, _ := ipNet.Mask.Size()
 	if ipAddr.To4() != nil {
-		s.AddAddress(nic, ipv4.ProtocolNumber, tcpip.Address(ipAddr.To4()))
+		s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
+			Protocol: ipv4.ProtocolNumber,
+			AddressWithPrefix: tcpip.AddressWithPrefix{
+				Address:   tcpip.AddrFromSlice(ipAddr.To4()),
+				PrefixLen: PrefixLen,
+			},
+		}, stack.AddressProperties{})
 	} else {
-		s.AddAddress(nic, ipv6.ProtocolNumber, tcpip.Address(ipAddr))
+		s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
+			Protocol: ipv6.ProtocolNumber,
+			AddressWithPrefix: tcpip.AddressWithPrefix{
+				Address:   tcpip.AddrFromSlice(ipAddr),
+				PrefixLen: PrefixLen,
+			},
+		}, stack.AddressProperties{})
 	}
 
 	rt := s.GetRouteTable()
@@ -184,13 +198,44 @@ func StackRoutingSetup(s *stack.Stack, nic tcpip.NICID, assignNet string) {
 	s.SetRouteTable(rt)
 }
 
+// ResolveLinkLocalV6 returns the gateway's IPv6 link-local address. If override
+// is empty it is derived from the gateway MAC via modified EUI-64, mirroring how
+// a real host picks one. Otherwise override is used, and must be a valid
+// link-local (fe80::/10) address. Lots of IPv6 communication relies on
+// link-local addresses, so the gateway needs one.
+func ResolveLinkLocalV6(override string, mac net.HardwareAddr) (tcpip.Address, error) {
+	if override == "" {
+		return header.LinkLocalAddr(tcpip.LinkAddress(mac)), nil
+	}
+	ip := NetParseIP(override)
+	if ip == nil {
+		return tcpip.Address{}, fmt.Errorf("invalid gw-ipv6-ll %q", override)
+	}
+	addr := tcpip.AddrFromSlice(ip)
+	if !header.IsV6LinkLocalUnicastAddress(addr) {
+		return tcpip.Address{}, fmt.Errorf("gw-ipv6-ll %q is not a link-local (fe80::/10) address", override)
+	}
+	return addr, nil
+}
+
+// StackAssignAddr6 assigns an IPv6 address to a NIC.
+func StackAssignAddr6(s *stack.Stack, nic tcpip.NICID, addr tcpip.Address, prefixLen int) {
+	s.AddProtocolAddress(nic, tcpip.ProtocolAddress{
+		Protocol: ipv6.ProtocolNumber,
+		AddressWithPrefix: tcpip.AddressWithPrefix{
+			Address:   addr,
+			PrefixLen: prefixLen,
+		},
+	}, stack.AddressProperties{})
+}
+
 func StackPrimeArp(s *stack.Stack, nic tcpip.NICID, ip net.IP) {
 	// Prime the arp cache. Otherwise we get "no remote link
 	// address" on first write.
 	if ip.To4() != nil {
 		s.GetLinkAddress(nic,
-			tcpip.Address(ip.To4()),
-			"",
+			tcpip.AddrFromSlice(ip.To4()),
+			tcpip.Address{},
 			ipv4.ProtocolNumber,
 			nil)
 	}
@@ -215,16 +260,15 @@ func GonetDialTCP(s *stack.Stack, laddr, raddr *tcpip.FullAddress, network tcpip
 	// Create wait queue entry that notifies a channel.
 	//
 	// We do this unconditionally as Connect will always return an error.
-	waitEntry, notifyCh := waiter.NewChannelEntry(nil)
-	wq.EventRegister(&waitEntry, waiter.EventOut)
+	waitEntry, notifyCh := waiter.NewChannelEntry(waiter.EventOut)
+	wq.EventRegister(&waitEntry)
 	defer wq.EventUnregister(&waitEntry)
 
 	err = ep.Connect(*raddr)
-	if err == tcpip.ErrConnectStarted {
+	if _, ok := err.(*tcpip.ErrConnectStarted); ok {
 		select {
 		case <-notifyCh:
 		}
-
 		err = ep.LastError()
 	}
 	if err != nil {

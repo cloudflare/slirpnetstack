@@ -1,28 +1,32 @@
-module github.com/cloudflare/slirpnetstack
+module github.com/KusakabeShi/slirpnetstack
 
-go 1.13
+go 1.26.3
 
 require (
-	github.com/bazelbuild/rules_go v0.25.0 // indirect
+	github.com/higebu/netfd v0.0.0-20171006072739-15573c3bed1f
+	github.com/miekg/dns v1.1.57
+	github.com/opencontainers/runc v1.2.3
+	github.com/opencontainers/runtime-spec v1.2.1
+	github.com/vishvananda/netlink v1.3.1-0.20250303224720-0e7078ed04c8
+	golang.org/x/sys v0.43.0
+	gopkg.in/netaddr.v1 v1.5.1
+	gvisor.dev/gvisor v0.0.0-20260609190117-5b5430a559c4
+)
+
+require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
-	github.com/golang/protobuf v1.4.3 // indirect
-	github.com/google/go-cmp v0.5.4 // indirect
-	github.com/kr/text v0.2.0 // indirect
-	github.com/miekg/dns v1.1.35
-	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
-	github.com/opencontainers/runc v0.1.1
-	github.com/opencontainers/runtime-spec v1.0.2
-	github.com/stretchr/testify v1.6.1 // indirect
-	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
-	github.com/vishvananda/netlink v1.1.0
-	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
-	golang.org/x/crypto v0.0.0-20201203163018-be400aefbc4c // indirect
-	golang.org/x/net v0.0.0-20201202161906-c7110b5ffcbb // indirect
-	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9 // indirect
-	golang.org/x/sys v0.0.0-20201202213521-69691e467435
-	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
-	gopkg.in/netaddr.v1 v1.4.0
-	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
-	gvisor.dev/gvisor v0.0.0-20201204040109-0ba39926c86f
+	github.com/google/btree v1.1.3 // indirect
+	github.com/moby/sys/capability v0.4.0 // indirect
+	github.com/mohae/deepcopy v0.0.0-20170308212314-bb9b5e7adda9 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/vishvananda/netns v0.0.5 // indirect
+	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc // indirect
+	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/tools v0.43.0 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )

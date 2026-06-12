@@ -1,4 +1,4 @@
-package main
+package slirpnetstack
 
 import (
 	"github.com/vishvananda/netlink"
